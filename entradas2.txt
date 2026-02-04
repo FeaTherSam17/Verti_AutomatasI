@@ -1,0 +1,16 @@
+BGN{
+COLOR rojo = #FF0000;
+MIX(rojo, verde);
+COLOR azul = MIX(rojo, verde1);
+--COLOR azul = MIX(rojo, #5416B4);
+COLOR morado = #5416B4;--
+COLOR verde = azul;
+--Ejemplo de comentario
+--Comenrario malo
+COLOR r--osa =rgb(255, 116, 218);
+COLOR AZUL = #00FFFF;
+SHOW(rojo); -- comentario despues del ;
+COLOR malo = #ffffff;
+COLOR 1rojo = #123456;
+SHOW();
+}END
