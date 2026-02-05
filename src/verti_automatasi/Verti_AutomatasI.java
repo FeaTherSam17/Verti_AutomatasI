@@ -4,16 +4,31 @@
  */
 package verti_automatasi;
 
+import java.awt.BorderLayout;
+import java.awt.FlowLayout;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.swing.JButton;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
+import javax.swing.table.DefaultTableModel;
 
 /**
  *
@@ -50,16 +65,112 @@ public class Verti_AutomatasI {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        String ruta = "entradas2.txt";
-        try {
-            String cadena = Files.readString(Paths.get(ruta), StandardCharsets.UTF_8);
-            cadena = eliminarComentarios(cadena);
-            analizarLexico(cadena);
+        SwingUtilities.invokeLater(Verti_AutomatasI::iniciarGui);
+    }
+
+    private static void iniciarGui() {
+        JFrame frame = new JFrame("Verti - Analizador");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        JTextArea entradaArea = new JTextArea(12, 60);
+        JTextArea salidaArea = new JTextArea(12, 60);
+        salidaArea.setEditable(false);
+
+        DefaultTableModel lexicoModel = new DefaultTableModel(
+                new Object[]{"Tipo", "Token", "Valor"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable lexicoTable = new JTable(lexicoModel);
+
+        JButton abrirBtn = new JButton("Abrir archivo");
+        JButton analizarBtn = new JButton("Analizar");
+        JButton limpiarBtn = new JButton("Limpiar");
+
+        JLabel rutaLabel = new JLabel("Archivo: (sin seleccionar)");
+
+        abrirBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            int result = chooser.showOpenDialog(frame);
+            if (result == JFileChooser.APPROVE_OPTION) {
+                try {
+                    String contenido = Files.readString(chooser.getSelectedFile().toPath(), StandardCharsets.UTF_8);
+                    entradaArea.setText(contenido);
+                    rutaLabel.setText("Archivo: " + chooser.getSelectedFile().getName());
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(frame,
+                            "No se pudo leer el archivo seleccionado.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        analizarBtn.addActionListener(e -> {
+            String texto = entradaArea.getText();
+            if (texto == null || texto.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(frame,
+                        "Ingresa o carga un texto para analizar.",
+                        "Aviso",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            String salida = analizarYCapturarSalida(texto, lexicoModel);
+            salidaArea.setText(salida);
+            salidaArea.setCaretPosition(0);
+        });
+
+        limpiarBtn.addActionListener(e -> {
+            entradaArea.setText("");
+            salidaArea.setText("");
+            rutaLabel.setText("Archivo: (sin seleccionar)");
+        });
+
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        topPanel.add(abrirBtn);
+        topPanel.add(analizarBtn);
+        topPanel.add(limpiarBtn);
+
+        JPanel rutaPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        rutaPanel.add(rutaLabel);
+
+        JSplitPane bottomSplit = new JSplitPane(
+            JSplitPane.HORIZONTAL_SPLIT,
+            new JScrollPane(lexicoTable),
+            new JScrollPane(salidaArea));
+        bottomSplit.setResizeWeight(0.5);
+
+        JSplitPane splitPane = new JSplitPane(
+            JSplitPane.VERTICAL_SPLIT,
+            new JScrollPane(entradaArea),
+            bottomSplit);
+        splitPane.setResizeWeight(0.5);
+
+        frame.setLayout(new BorderLayout());
+        frame.add(topPanel, BorderLayout.NORTH);
+        frame.add(splitPane, BorderLayout.CENTER);
+        frame.add(rutaPanel, BorderLayout.SOUTH);
+        frame.pack();
+        frame.setLocationRelativeTo(null);
+        frame.setVisible(true);
+    }
+
+    private static String analizarYCapturarSalida(String texto, DefaultTableModel lexicoModel) {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        try (PrintStream ps = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
+            System.setOut(ps);
+            String cadena = eliminarComentarios(texto);
+            List<LexicoItem> items = analizarLexico(cadena);
+            cargarTablaLexica(lexicoModel, items);
             List<String> instrucciones = extraerInstrucciones(cadena);
             analisisSintactico(instrucciones);
-        } catch (IOException ex) {
-            System.out.println("No se encontró el archivo '" + ruta + "'.");
+        } finally {
+            System.setOut(originalOut);
         }
+        return buffer.toString(StandardCharsets.UTF_8);
     }
 
     private static String separarCadena(String cadena) {
@@ -79,31 +190,21 @@ public class Verti_AutomatasI {
         return true;
     }
 
-    private static boolean analizarLexico(String cadena) {
-        System.out.println("Análisis Léxico");
-
-        System.out.println("\nSímbolos especiales encontrados:");
-        boolean encontradaSimbolo = false;
+    private static List<LexicoItem> analizarLexico(String cadena) {
+        List<LexicoItem> items = new ArrayList<>();
         for (int i = 0; i < cadena.length(); i++) {
             char c = cadena.charAt(i);
             for (Map.Entry<Integer, String> entry : SIMBOLOS.entrySet()) {
                 if (entry.getValue().charAt(0) == c) {
-                    System.out.println("  Token " + entry.getKey() + ": " + entry.getValue());
-                    encontradaSimbolo = true;
+                    items.add(new LexicoItem("Simbolo", String.valueOf(entry.getKey()), entry.getValue()));
                 }
             }
-        }
-        if (!encontradaSimbolo) {
-            System.out.println("Ninguno");
         }
 
         String cadenaNormalizada = separarCadena(cadena);
         String[] tokens = cadenaNormalizada.trim().isEmpty()
                 ? new String[0]
                 : cadenaNormalizada.trim().split("\\s+");
-
-        System.out.println("\nPalabras clave encontradas:");
-        boolean encontradaClave = false;
         for (String token : tokens) {
             String tokenUpper = token.toUpperCase();
             if (PALABRAS_CLAVE.containsValue(tokenUpper)) {
@@ -115,28 +216,24 @@ public class Verti_AutomatasI {
                     }
                 }
                 if (idClave != -1) {
-                    System.out.println("  Token " + idClave + ": " + tokenUpper);
-                    encontradaClave = true;
+                    items.add(new LexicoItem("Palabra clave", String.valueOf(idClave), tokenUpper));
                 }
             }
         }
-        if (!encontradaClave) {
-            System.out.println("Ninguna");
-        }
-
-        System.out.println("\nVerificación de errores léxicos:");
-        boolean errores = false;
         for (String token : tokens) {
             if (!esTokenValido(token)) {
-                System.out.println("  Error léxico: token inválido -> '" + token + "'");
-                errores = true;
+                items.add(new LexicoItem("Error", "-", "token invalido -> '" + token + "'"));
             }
         }
-        if (!errores) {
-            System.out.println("Ninguno\n");
-        }
 
-        return true;
+        return items;
+    }
+
+    private static void cargarTablaLexica(DefaultTableModel lexicoModel, List<LexicoItem> items) {
+        lexicoModel.setRowCount(0);
+        for (LexicoItem item : items) {
+            lexicoModel.addRow(new Object[]{item.tipo, item.token, item.valor});
+        }
     }
 
     private static List<String> extraerInstrucciones(String cadena) {
@@ -273,6 +370,18 @@ public class Verti_AutomatasI {
         private ValidacionResultado(boolean esValido, String mensajeError) {
             this.esValido = esValido;
             this.mensajeError = mensajeError;
+        }
+    }
+
+    private static class LexicoItem {
+        private final String tipo;
+        private final String token;
+        private final String valor;
+
+        private LexicoItem(String tipo, String token, String valor) {
+            this.tipo = tipo;
+            this.token = token;
+            this.valor = valor;
         }
     }
     
