@@ -21,6 +21,7 @@ import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -84,22 +85,35 @@ public class Verti_AutomatasI {
             }
         };
         JTable lexicoTable = new JTable(lexicoModel);
-
-        JButton abrirBtn = new JButton("Abrir archivo");
+        
+        // Declarar variables que se usarán en el menú
         JButton analizarBtn = new JButton("Analizar");
         JButton limpiarBtn = new JButton("Limpiar");
-
         JLabel rutaLabel = new JLabel("Archivo: (sin seleccionar)");
 
-        abrirBtn.addActionListener(e -> {
+        // ==================== CREACIÓN DE UN MENU DESPLEGABLE ====================
+        // JMenuBar: Es la barra contenedora de menús que se coloca en la parte superior de la ventana
+        javax.swing.JMenuBar menuBar = new javax.swing.JMenuBar();
+        
+        // JMenu: Crea un menú llamado "File" que contendrá las opciones
+        JMenu menu = new JMenu("File");
+        
+        // ==================== OPCIÓN 1: OPEN ====================
+        // Permite al usuario seleccionar y abrir un archivo de texto
+        menu.add("Open").addActionListener(e -> {
+            // JFileChooser: Abre un diálogo para seleccionar archivos
             JFileChooser chooser = new JFileChooser();
             int result = chooser.showOpenDialog(frame);
+            
+            // APPROVE_OPTION: Verifica si el usuario seleccionó un archivo (no canceló)
             if (result == JFileChooser.APPROVE_OPTION) {
                 try {
+                    // Lee el contenido del archivo seleccionado en UTF-8
                     String contenido = Files.readString(chooser.getSelectedFile().toPath(), StandardCharsets.UTF_8);
+                    // Coloca el contenido en el área de entrada para analizar
                     entradaArea.setText(contenido);
-                    rutaLabel.setText("Archivo: " + chooser.getSelectedFile().getName());
                 } catch (IOException ex) {
+                    // Si hay error al leer el archivo, muestra un mensaje de error
                     JOptionPane.showMessageDialog(frame,
                             "No se pudo leer el archivo seleccionado.",
                             "Error",
@@ -107,6 +121,112 @@ public class Verti_AutomatasI {
                 }
             }
         });
+        
+        // Variable para almacenar la ruta del archivo actual (para función Save)
+        java.io.File[] archivoActual = new java.io.File[1];
+        
+        // ==================== OPCIÓN 2: Save ====================
+        // Guarda el contenido actual manteniendo la ruta del archivo
+        // Si no hay archivo asociado, abre el diálogo "Save As..."
+        menu.add("Save").addActionListener(e -> {
+            String texto = entradaArea.getText();
+            
+            // Verifica que hay contenido para guardar
+            if (texto == null || texto.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(frame,
+                        "No hay contenido para guardar.",
+                        "Aviso",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            // Si ya hay un archivo asociado, guarda directamente
+            if (archivoActual[0] != null) {
+                try {
+                    // Files.write: Escribe el contenido en el archivo (lo sobrescribe)
+                    // StandardCharsets.UTF_8: Especifica la codificación de caracteres
+                    Files.write(archivoActual[0].toPath(), texto.getBytes(StandardCharsets.UTF_8));
+                    JOptionPane.showMessageDialog(frame,
+                            "Archivo guardado exitosamente.",
+                            "Éxito",
+                            JOptionPane.INFORMATION_MESSAGE);
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(frame,
+                            "No se pudo guardar el archivo.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            } else {
+                // Si no hay archivo, abre el diálogo de "Save As..."
+                JOptionPane.showMessageDialog(frame,
+                        "Primero selecciona una ubicación con 'Save As...'",
+                        "Información",
+                        JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+        
+        // ==================== OPCIÓN 3: Save As... ====================
+        // Abre un diálogo para guardar el archivo con una nueva ubicación o nombre
+        menu.add("Save As...").addActionListener(e -> {
+            String texto = entradaArea.getText();
+            
+            // Verifica que hay contenido para guardar
+            if (texto == null || texto.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(frame,
+                        "No hay contenido para guardar.",
+                        "Aviso",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            // JFileChooser: Componente para seleccionar ubicación de archivo
+            JFileChooser chooser = new JFileChooser();
+            // showSaveDialog: Abre el diálogo de guardar archivo
+            int result = chooser.showSaveDialog(frame);
+            
+            // Verifica si el usuario confirmó la operación
+            if (result == JFileChooser.APPROVE_OPTION) {
+                try {
+                    // Obtiene la ruta seleccionada por el usuario
+                    java.io.File archivo = chooser.getSelectedFile();
+                    // Guarda la referencia del archivo para usar en "Save"
+                    archivoActual[0] = archivo;
+                    
+                    // Escribe el contenido en la ubicación seleccionada
+                    Files.write(archivo.toPath(), texto.getBytes(StandardCharsets.UTF_8));
+                    
+                    // Actualiza la etiqueta mostrando el nombre del archivo guardado
+                    rutaLabel.setText("Archivo: " + archivo.getName());
+                    
+                    JOptionPane.showMessageDialog(frame,
+                            "Archivo guardado como: " + archivo.getName(),
+                            "Éxito",
+                            JOptionPane.INFORMATION_MESSAGE);
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(frame,
+                            "No se pudo guardar el archivo.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        // ==================== SEPARADOR ====================
+        // Añade una línea separadora visual entre opciones del menú
+        menu.addSeparator();
+        
+        // ==================== OPCIÓN 3: EXIT ====================
+        // Cierra la aplicación
+        menu.add("Exit").addActionListener(e -> System.exit(0));
+        
+        // ==================== AGREGACIÓN DEL MENÚ A LA BARRA ====================
+        // Agrega el menú "File" a la barra de menús
+        menuBar.add(menu);
+        
+        // ==================== ESTABLECER LA BARRA DE MENÚS EN LA VENTANA ====================
+        // setJMenuBar: Coloca la barra de menús en la parte superior del frame
+        // Este es el paso imprescindible para que el menú aparezca en la ventana
+        frame.setJMenuBar(menuBar);
 
         analizarBtn.addActionListener(e -> {
             String texto = entradaArea.getText();
@@ -128,8 +248,9 @@ public class Verti_AutomatasI {
             rutaLabel.setText("Archivo: (sin seleccionar)");
         });
 
+        // Panel superior que contiene los botones de acceso rápido
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        topPanel.add(abrirBtn);
+        //topPanel.add(abrirBtn);
         topPanel.add(analizarBtn);
         topPanel.add(limpiarBtn);
 
