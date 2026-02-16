@@ -394,27 +394,25 @@ public class Verti_AutomatasI {
     // Separar sentencias respetando strings
         List<String> sentencias = new ArrayList<>();// lista para almacenar sentencias completas
 
-        StringBuilder actual = new StringBuilder();
-        boolean dentroCadena = false;
+        StringBuilder actual = new StringBuilder();//Almacena la sentencia actual 
+        boolean dentroCadena = false;//Variable que permite detectar si etamos o no en el final de una sentencia entre comillas
 
-        for(int i = 0; i < mainBody.length(); i++){//Recorremos el cuerpoa para separa las sentencias 
-
+        for(int i = 0; i < mainBody.length(); i++){//Recorremos el cuerpoa para separa las sentencias +
             char c = mainBody.charAt(i);
-
-            if(c == '"'){
+            if(c == '"'){// Si hay una commilla, alternamos el estado de dentroCadena para saber si estamos dentro o fuera de una cadena
                 dentroCadena = !dentroCadena; // alternar estado
                 actual.append(c);
                 continue;
             }
 
-            if(c == ';' && !dentroCadena){
+            if(c == ';' && !dentroCadena){//Si hay un punto y coma y no estamos dentro de una cadena, consideramos que es el final de una sentencia
                 actual.append(';');
                 sentencias.add(actual.toString());
                 actual.setLength(0);
                 continue;
             }
 
-            actual.append(c);
+            actual.append(c);//Para cualquier otro caracter.
         }
 
         // Si quedó algo sin cerrar con ;
@@ -431,7 +429,7 @@ public class Verti_AutomatasI {
         "^\\s*(print!|println!)\\s*\\(\\s*(\"[^\"]*\"|[A-Za-z_][A-Za-z0-9_]*)\\s*\\)\\s*;\\s*$"
     );
 
-    // Validar cada sentencia
+    // Validar cada sentencia DEK ARREGLO DE SENTENCIAS
     for(int i = 0; i < sentencias.size(); i++){
 
         String sentencia = sentencias.get(i).trim();
