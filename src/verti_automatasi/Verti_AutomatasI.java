@@ -5,6 +5,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.List;
 import java.util.regex.*;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -385,13 +386,78 @@ public class Verti_AutomatasI {
         if(!despuesMain.isEmpty()) sb.append("Error sintáctico: código después de la última llave no permitido\n");
 
 
+
         //=============================================================
-        //Validaci´´o´n de lineas interndas del main
+        // Validación de sentencias internas del main
         //=============================================================
 
+    // Separar sentencias respetando strings
+        List<String> sentencias = new ArrayList<>();// lista para almacenar sentencias completas
 
-        if(sb.length()==0) sb.append("Sin errores sintácticos detectados.");
-        return sb.toString();
+        StringBuilder actual = new StringBuilder();
+        boolean dentroCadena = false;
+
+        for(int i = 0; i < mainBody.length(); i++){//Recorremos el cuerpoa para separa las sentencias 
+
+            char c = mainBody.charAt(i);
+
+            if(c == '"'){
+                dentroCadena = !dentroCadena; // alternar estado
+                actual.append(c);
+                continue;
+            }
+
+            if(c == ';' && !dentroCadena){
+                actual.append(';');
+                sentencias.add(actual.toString());
+                actual.setLength(0);
+                continue;
+            }
+
+            actual.append(c);
+        }
+
+        // Si quedó algo sin cerrar con ;
+        if(actual.toString().trim().length() > 0){
+            sb.append("Error sintáctico: falta ';' al final de una sentencia.\n");
+        }
+
+    //  Patrones válidos
+    Pattern patronAsignacion = Pattern.compile(
+        "^\\s*let\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*([A-Za-z_][A-Za-z0-9_]*|\\d+)\\s*;\\s*$"
+    );
+
+    Pattern patronPrint = Pattern.compile(
+        "^\\s*(print!|println!)\\s*\\(\\s*(\"[^\"]*\"|[A-Za-z_][A-Za-z0-9_]*)\\s*\\)\\s*;\\s*$"
+    );
+
+    // Validar cada sentencia
+    for(int i = 0; i < sentencias.size(); i++){
+
+        String sentencia = sentencias.get(i).trim();
+
+        if(sentencia.isEmpty())
+            continue;
+
+        if(patronAsignacion.matcher(sentencia).matches())
+            continue;
+
+        if(patronPrint.matcher(sentencia).matches())
+            continue;
+
+        sb.append("Error sintáctico en sentencia ")
+        .append(i+1)
+        .append(": estructura no válida -> ")
+        .append(sentencia)
+        .append("\n");
+    }
+
+    if(sb.length() == 0)
+        sb.append("Sin errores sintácticos detectados.");
+
+    return sb.toString();
+
+       
     }
 
     // Analizador semántico básico: detecta identificadores repetidos declarados con `let`
