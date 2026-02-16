@@ -1,80 +1,16 @@
-private static String analizarSintactico(String texto){
+fn main() {
 
-    StringBuilder sb = new StringBuilder();
+    let a = 3;
+    let b = 4;
+    let c = 0;
 
-    // -------------------------------------------------
-    // 1️⃣ Verificar estructura general fn main() { }
-    // -------------------------------------------------
-
-    Pattern estructuraMain = Pattern.compile(
-        "^\\s*fn\\s+main\\s*\\(\\s*\\)\\s*\\{([\\s\\S]*)\\}\\s*$"
-    );
-
-    Matcher mainMatcher = estructuraMain.matcher(texto);
-
-    if(!mainMatcher.matches()){
-        sb.append("Error sintáctico: El programa debe estar dentro de 'fn main() { ... }'\n");
-        return sb.toString();
+    if a < b {
+        c = a + b;
+    } else {
+        c = a - b;
     }
 
-    // Extraemos contenido interno del main
-    String cuerpo = mainMatcher.group(1);
+    println!("Resultado:");
+    println!(c);
 
-    // -------------------------------------------------
-    // 2️⃣ Balanceo de paréntesis y llaves
-    // -------------------------------------------------
-
-    int parOpen=0, parClose=0, braceOpen=0, braceClose=0;
-
-    for(char c: texto.toCharArray()){
-        if(c=='(') parOpen++;
-        if(c==')') parClose++;
-        if(c=='{') braceOpen++;
-        if(c=='}') braceClose++;
-    }
-
-    if(parOpen!=parClose)
-        sb.append("Error sintáctico: paréntesis desbalanceados ("+parOpen+" vs "+parClose+")\n");
-
-    if(braceOpen!=braceClose)
-        sb.append("Error sintáctico: llaves desbalanceadas ("+braceOpen+" vs "+braceClose+")\n");
-
-    // -------------------------------------------------
-    // 3️⃣ Validar líneas internas
-    // -------------------------------------------------
-
-    String[] lineas = cuerpo.split("\\n");
-
-    Pattern patronAsignacion = Pattern.compile(
-        "^\\s*let\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*([A-Za-z_][A-Za-z0-9_]*|\\d+)\\s*;\\s*$"
-    );
-
-    Pattern patronPrint = Pattern.compile(
-        "^\\s*(print!|println!)\\s*\\(.*\\)\\s*;\\s*$"
-    );
-
-    for(int i=0;i<lineas.length;i++){
-
-        String linea = lineas[i].trim();
-
-        if(linea.isEmpty())
-            continue;
-
-        if(patronAsignacion.matcher(linea).matches())
-            continue;
-
-        if(patronPrint.matcher(linea).matches())
-            continue;
-
-        sb.append("Error sintáctico en línea ")
-          .append(i+1)
-          .append(": estructura no válida -> ")
-          .append(linea)
-          .append("\n");
-    }
-
-    if(sb.length()==0)
-        sb.append("Sin errores sintácticos detectados.");
-
-    return sb.toString();
 }
