@@ -11,12 +11,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.regex.Pattern;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -39,13 +37,27 @@ import javax.swing.table.DefaultTableModel;
  */
 public class Verti_AutomatasI {
 
-    private static final Set<String> PALABRAS_RESERVADAS = new HashSet<>(Arrays.asList(
-            "println", "print", "fn", "main", "let", "mut",
-            "i32", "f64", "bool", "String", "str", "char",
-            "if", "else", "loop", "while", "for", "return"
-    ));
+    private static final String REGEX_IDENTIFICADOR = "[a-zA-Z_][a-zA-Z0-9_]*";
+    private static final String REGEX_ENTERO = "[0-9]+";
+    private static final String REGEX_FLOTANTE = "[0-9]+\\.[0-9]+";
+    private static final String REGEX_CADENA = "\"[^\"]*\"";
+    private static final String REGEX_BOOLEANO = "true|false";
+    private static final String REGEX_PALABRA_RESERVADA = "println|print|fn|main|let|mut|i32|f64|bool|String|str|char|if|else|loop|while|for|return";
+    private static final String REGEX_SIMBOLO = "->|!|\\(|\\)|,|\\\"|\\{|\\}|;|:|=|\\+|-|\\*|/|%";
+    private static final String REGEX_ESPACIOS = "[ \\t\\n\\r]+";
+    private static final String REGEX_COMENTARIO_LINEA = "//[^\\n]*";
+    private static final String REGEX_COMENTARIO_BLOQUE = "/\\*[\\s\\S]*?\\*/";
 
-    private static final Set<String> LITERALES_BOOLEANOS = new HashSet<>(Arrays.asList("true", "false"));
+    private static final Pattern PATRON_IDENTIFICADOR = Pattern.compile(REGEX_IDENTIFICADOR);
+    private static final Pattern PATRON_ENTERO = Pattern.compile(REGEX_ENTERO);
+    private static final Pattern PATRON_FLOTANTE = Pattern.compile(REGEX_FLOTANTE);
+    private static final Pattern PATRON_CADENA = Pattern.compile(REGEX_CADENA);
+    private static final Pattern PATRON_BOOLEANO = Pattern.compile(REGEX_BOOLEANO);
+    private static final Pattern PATRON_PALABRA_RESERVADA = Pattern.compile(REGEX_PALABRA_RESERVADA);
+    private static final Pattern PATRON_SIMBOLO = Pattern.compile(REGEX_SIMBOLO);
+    private static final Pattern PATRON_ESPACIOS = Pattern.compile(REGEX_ESPACIOS);
+    private static final Pattern PATRON_COMENTARIO_LINEA = Pattern.compile(REGEX_COMENTARIO_LINEA);
+    private static final Pattern PATRON_COMENTARIO_BLOQUE = Pattern.compile(REGEX_COMENTARIO_BLOQUE);
 
     private static final Map<String, String> TOKENS_SIMBOLOS = new LinkedHashMap<>();
 
@@ -92,7 +104,7 @@ public class Verti_AutomatasI {
         analisisTabs.addTab("Análisis léxico", new JScrollPane(lexicoTable));
         analisisTabs.addTab("Análisis sintáctico", new JPanel(new BorderLayout()));
         analisisTabs.addTab("Análisis semántico", new JPanel(new BorderLayout()));
-        analisisTabs.addTab("Código intermedio", new JPanel(new BorderLayout()));
+        //analisisTabs.addTab("Código intermedio", new JPanel(new BorderLayout()));
 
         JButton abrirBtn = new JButton("Abrir archivo");
         JButton analizarBtn = new JButton("Analizar");
@@ -212,7 +224,7 @@ public class Verti_AutomatasI {
         while (i < texto.length()) {
             char actual = texto.charAt(i);
 
-            if (Character.isWhitespace(actual)) {
+            if (PATRON_ESPACIOS.matcher(String.valueOf(actual)).matches()) {
                 if (actual == '\n') {
                     linea++;
                     columna = 1;
@@ -226,17 +238,27 @@ public class Verti_AutomatasI {
             if (actual == '/' && i + 1 < texto.length()) {
                 char siguiente = texto.charAt(i + 1);
                 if (siguiente == '/') {
+                    int inicioComentario = i;
+                    int inicioLineaComentario = linea;
+                    int inicioColumnaComentario = columna;
                     i += 2;
                     columna += 2;
                     while (i < texto.length() && texto.charAt(i) != '\n') {
                         i++;
                         columna++;
                     }
+                    String comentarioLinea = texto.substring(inicioComentario, i);
+                    if (PATRON_COMENTARIO_LINEA.matcher(comentarioLinea).matches()) {
+                        items.add(new LexicoItem(comentarioLinea, "comentario_linea", "", inicioLineaComentario, inicioColumnaComentario));
+                    } else {
+                        items.add(new LexicoItem(comentarioLinea, "error", "Comentario de línea inválido", inicioLineaComentario, inicioColumnaComentario));
+                    }
                     continue;
                 }
                 if (siguiente == '*') {
                     int inicioLinea = linea;
                     int inicioColumna = columna;
+                    int inicioComentario = i;
                     i += 2;
                     columna += 2;
                     boolean cerrado = false;
@@ -256,7 +278,14 @@ public class Verti_AutomatasI {
                         i++;
                         columna++;
                     }
-                    if (!cerrado) {
+                    if (cerrado) {
+                        String comentarioBloque = texto.substring(inicioComentario, i);
+                        if (PATRON_COMENTARIO_BLOQUE.matcher(comentarioBloque).matches()) {
+                            items.add(new LexicoItem(comentarioBloque, "comentario_bloque", "", inicioLinea, inicioColumna));
+                        } else {
+                            items.add(new LexicoItem(comentarioBloque, "error", "Comentario de bloque inválido", inicioLinea, inicioColumna));
+                        }
+                    } else {
                         items.add(new LexicoItem("/*", "error", "Comentario de bloque sin cerrar", inicioLinea, inicioColumna));
                     }
                     continue;
@@ -276,12 +305,14 @@ public class Verti_AutomatasI {
                     }
                 }
                 String lexema = texto.substring(inicio, i);
-                if (LITERALES_BOOLEANOS.contains(lexema)) {
+                if (PATRON_BOOLEANO.matcher(lexema).matches()) {
                     items.add(new LexicoItem(lexema, "booleano", "", linea, inicioColumna));
-                } else if (PALABRAS_RESERVADAS.contains(lexema)) {
+                } else if (PATRON_PALABRA_RESERVADA.matcher(lexema).matches()) {
                     items.add(new LexicoItem(lexema, "palabra reservada", "", linea, inicioColumna));
-                } else {
+                } else if (PATRON_IDENTIFICADOR.matcher(lexema).matches()) {
                     items.add(new LexicoItem(lexema, "identificador", "", linea, inicioColumna));
+                } else {
+                    items.add(new LexicoItem(lexema, "error", "Identificador inválido", linea, inicioColumna));
                 }
                 continue;
             }
@@ -304,7 +335,11 @@ public class Verti_AutomatasI {
                     }
                 }
                 String lexemaNumero = texto.substring(inicio, i);
-                items.add(new LexicoItem(lexemaNumero, "numero", "", linea, inicioColumna));
+                if (PATRON_FLOTANTE.matcher(lexemaNumero).matches() || PATRON_ENTERO.matcher(lexemaNumero).matches()) {
+                    items.add(new LexicoItem(lexemaNumero, "numero", "", linea, inicioColumna));
+                } else {
+                    items.add(new LexicoItem(lexemaNumero, "error", "Número inválido", linea, inicioColumna));
+                }
                 continue;
             }
 
@@ -336,7 +371,12 @@ public class Verti_AutomatasI {
                 }
 
                 if (cerrado) {
-                    items.add(new LexicoItem(literal.toString(), "cadena", "", inicioLinea, inicioColumna));
+                    String lexemaCadena = literal.toString();
+                    if (PATRON_CADENA.matcher(lexemaCadena).matches()) {
+                        items.add(new LexicoItem(lexemaCadena, "cadena", "", inicioLinea, inicioColumna));
+                    } else {
+                        items.add(new LexicoItem(lexemaCadena, "error", "Cadena inválida", inicioLinea, inicioColumna));
+                    }
                 } else {
                     items.add(new LexicoItem(literal.toString(), "error", "Cadena sin cerrar", inicioLinea, inicioColumna));
                 }
@@ -344,14 +384,20 @@ public class Verti_AutomatasI {
             }
 
             if (actual == '-' && i + 1 < texto.length() && texto.charAt(i + 1) == '>') {
-                items.add(new LexicoItem("->", "simbolo", "", linea, columna));
+                String simboloFlecha = "->";
+                if (PATRON_SIMBOLO.matcher(simboloFlecha).matches()) {
+                    items.add(new LexicoItem(simboloFlecha, "simbolo", "", linea, columna));
+                } else {
+                    items.add(new LexicoItem(simboloFlecha, "error", "Símbolo inválido", linea, columna));
+                }
                 i += 2;
                 columna += 2;
                 continue;
             }
 
             String simboloSimple = String.valueOf(actual);
-            if (TOKENS_SIMBOLOS.containsKey(simboloSimple) && !"\"".equals(simboloSimple)) {
+            if (TOKENS_SIMBOLOS.containsKey(simboloSimple) && !"\"".equals(simboloSimple)
+                    && PATRON_SIMBOLO.matcher(simboloSimple).matches()) {
                 items.add(new LexicoItem(simboloSimple, "simbolo", "", linea, columna));
                 i++;
                 columna++;

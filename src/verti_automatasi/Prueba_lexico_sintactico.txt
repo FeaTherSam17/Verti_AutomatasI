@@ -1,21 +1,47 @@
-let fuera = 1;                 // ERROR sintáctico: código antes de main no permitido
-@ $ ¿                        // ERROR léxico: símbolos no reconocidos
-
+let fuera: i32 = 1;                    // válido (variable global)
+@ $ ¿                                  // ERROR léxico: símbolos no reconocidos
+/* XDDDD */
 fn main() {
+
     println!("Inicio de pruebas");     // válido
-    print!(nombre);                    // sintácticamente válido (semántico dependerá de declaración)
+
+    // ===== PRUEBAS DE TIPOS VÁLIDOS =====
+
+    let entero: i32 = 42;              // válido
+    let decimal: f64 = 3.1416;         // válido
+    let activo: bool = true;           // válido
+    let texto_heap: String = String::from("Hola"); // válido
+    let texto_slice: &str = "Mundo";   // válido (str siempre es referencia)
+
+    println!(texto_slice);             // válido
+    println!(texto_heap);              // válido
+
+    // ===== ERRORES SEMÁNTICOS DE TIPOS =====
+
+    let error_entero: i32 = 3.14;      // ERROR semántico: f64 asignado a i32
+    let error_bool: bool = 1;          // ERROR semántico: entero asignado a bool
+    let error_char: char = "A";        // ERROR semántico: string en lugar de char
+    let error_string: String = "hola"; // ERROR semántico: &str no asignado correctamente a String
+    let error_str: str = "hola";       // ERROR semántico: str sin referencia (&str)
+
+    // ===== ERRORES SINTÁCTICOS =====
 
     print!("Falta punto y coma")       // ERROR sintáctico: falta ';'
     print!"Sin parentesis";            // ERROR sintáctico: estructura inválida
     println!("Cadena sin cerrar);      // ERROR sintáctico: cadena sin cerrar
     print!();                          // ERROR sintáctico: argumento vacío
     print!(a, b);                      // ERROR sintáctico: más de un argumento
-    println!(123);                     // ERROR sintáctico: argumento no permitido por tu patrón
+    println!(123);                     // ERROR sintáctico (según tu gramática)
     print!(hola mundo);                // ERROR sintáctico: argumento inválido
-    print!(nombre;                     // ERROR sintáctico: paréntesis desbalanceados / estructura inválida
+    print!(nombre;                     // ERROR sintáctico: paréntesis desbalanceados
 
-    let x = 10;                        // válido
-    let texto = "ok";                  // válido
+    // ===== PRUEBAS ADICIONALES DE TIPADO =====
+
+    let x: i32 = 10;                   // válido
+    let texto: &str = "ok";            // válido
+    let bandera: bool = false;         // válido
+    let pi: f64 = 3.0;                 // válido
+
     println!(texto);                   // válido
 
     */                                 // ERROR sintáctico: cierre de comentario sin apertura
@@ -24,4 +50,4 @@ fn main() {
 
     /* comentario de bloque SIN cierre
 }                                      // queda dentro del comentario abierto
-codigo_despues_main = 5;              // no debería procesarse normal por comentario sin cerrar
+codigo_despues_main = 5;               // no debería procesarse normal por comentario sin cerrar
