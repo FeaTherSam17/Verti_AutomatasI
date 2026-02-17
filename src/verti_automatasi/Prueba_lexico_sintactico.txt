@@ -1,0 +1,27 @@
+let fuera = 1;                 // ERROR sintáctico: código antes de main no permitido
+@ $ ¿                        // ERROR léxico: símbolos no reconocidos
+
+fn main() {
+    println!("Inicio de pruebas");     // válido
+    print!(nombre);                    // sintácticamente válido (semántico dependerá de declaración)
+
+    print!("Falta punto y coma")       // ERROR sintáctico: falta ';'
+    print!"Sin parentesis";            // ERROR sintáctico: estructura inválida
+    println!("Cadena sin cerrar);      // ERROR sintáctico: cadena sin cerrar
+    print!();                          // ERROR sintáctico: argumento vacío
+    print!(a, b);                      // ERROR sintáctico: más de un argumento
+    println!(123);                     // ERROR sintáctico: argumento no permitido por tu patrón
+    print!(hola mundo);                // ERROR sintáctico: argumento inválido
+    print!(nombre;                     // ERROR sintáctico: paréntesis desbalanceados / estructura inválida
+
+    let x = 10;                        // válido
+    let texto = "ok";                  // válido
+    println!(texto);                   // válido
+
+    */                                 // ERROR sintáctico: cierre de comentario sin apertura
+
+    // comentario de línea válido
+
+    /* comentario de bloque SIN cierre
+}                                      // queda dentro del comentario abierto
+codigo_despues_main = 5;              // no debería procesarse normal por comentario sin cerrar

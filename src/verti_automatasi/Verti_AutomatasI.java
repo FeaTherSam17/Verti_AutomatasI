@@ -1,477 +1,395 @@
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Main.java to edit this template
+ */
 package verti_automatasi;
 
-import java.awt.*;
-import java.io.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.FlowLayout;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.regex.*;
-import javax.swing.*;
+import java.util.Map;
+import java.util.Set;
+import javax.swing.JButton;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 
+/**
+ *
+ * @author samAF
+ */
 public class Verti_AutomatasI {
 
-    // ============================================================
-    // SECCIÓN 1: TABLA DE TOKENS
-    // ============================================================
+    private static final Set<String> PALABRAS_RESERVADAS = new HashSet<>(Arrays.asList(
+            "println", "print", "fn", "main", "let", "mut",
+            "i32", "f64", "bool", "String", "str", "char",
+            "if", "else", "loop", "while", "for", "return"
+    ));
 
-    private static final Map<String, TokenInfo> tablaTokens = new HashMap<>();
+    private static final Set<String> LITERALES_BOOLEANOS = new HashSet<>(Arrays.asList("true", "false"));
 
-    static class TokenInfo {
-        String tipo;
-        int numero;
-
-        TokenInfo(String tipo, int numero) {
-            this.tipo = tipo;
-            this.numero = numero;
-        }
-    }
+    private static final Map<String, String> TOKENS_SIMBOLOS = new LinkedHashMap<>();
 
     static {
-        // Palabras reservadas
-        tablaTokens.put("fn", new TokenInfo("Palabra reservada", 1));
-        tablaTokens.put("let", new TokenInfo("Palabra reservada", 2));
-        tablaTokens.put("if", new TokenInfo("Palabra reservada", 3));
-        tablaTokens.put("else", new TokenInfo("Palabra reservada", 4));
-        tablaTokens.put("println!", new TokenInfo("Palabra reservada", 5));
-        tablaTokens.put("print!", new TokenInfo("Palabra reservada", 6));
-        tablaTokens.put("const", new TokenInfo("Palabra reservada", 7));
-        tablaTokens.put("static", new TokenInfo("Palabra reservada", 8));
-        tablaTokens.put("main", new TokenInfo("Palabra reservada", 9));
-
-        // Símbolos simples
-        tablaTokens.put("(", new TokenInfo("Paréntesis apertura", 10));
-        tablaTokens.put(")", new TokenInfo("Paréntesis cierre", 11));
-        tablaTokens.put("{", new TokenInfo("Llave apertura", 12));
-        tablaTokens.put("}", new TokenInfo("Llave cierre", 13));
-        tablaTokens.put(";", new TokenInfo("Punto y coma", 14));
-        tablaTokens.put("=", new TokenInfo("Asignación", 15));
-        tablaTokens.put("+", new TokenInfo("Suma", 16));
-        tablaTokens.put("-", new TokenInfo("Resta", 17));
-        tablaTokens.put("*", new TokenInfo("Multiplicación", 18));
-        tablaTokens.put("/", new TokenInfo("División", 19));
-        tablaTokens.put(">", new TokenInfo("Mayor que", 20));
-        tablaTokens.put("<", new TokenInfo("Menor que", 21));
-        tablaTokens.put(",", new TokenInfo("Coma", 22));
-        tablaTokens.put(":", new TokenInfo("Anotación tipo", 23));
-        tablaTokens.put("\"", new TokenInfo("Comilla doble", 24));
-
-           // Operadores dobles
-        tablaTokens.put("==", new TokenInfo("Igual que", 25));
-        tablaTokens.put("!=", new TokenInfo("Distinto de", 26));
+        TOKENS_SIMBOLOS.put("->", "SYM_ARROW");
+        TOKENS_SIMBOLOS.put("!", "SYM_BANG");
+        TOKENS_SIMBOLOS.put("(", "SYM_LPAREN");
+        TOKENS_SIMBOLOS.put(")", "SYM_RPAREN");
+        TOKENS_SIMBOLOS.put(",", "SYM_COMMA");
+        TOKENS_SIMBOLOS.put("\"", "SYM_QUOTE");
+        TOKENS_SIMBOLOS.put("{", "SYM_LBRACE");
+        TOKENS_SIMBOLOS.put("}", "SYM_RBRACE");
+        TOKENS_SIMBOLOS.put(";", "SYM_SEMICOLON");
+        TOKENS_SIMBOLOS.put(":", "SYM_COLON");
+        TOKENS_SIMBOLOS.put("=", "SYM_ASSIGN");
+        TOKENS_SIMBOLOS.put("+", "SYM_PLUS");
+        TOKENS_SIMBOLOS.put("-", "SYM_MINUS");
+        TOKENS_SIMBOLOS.put("*", "SYM_STAR");
+        TOKENS_SIMBOLOS.put("/", "SYM_SLASH");
+        TOKENS_SIMBOLOS.put("%", "SYM_PERCENT");
     }
-
-    // ============================================================
-    // SECCIÓN 2: Main que ejecuta la GUI
-    // ============================================================
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(Verti_AutomatasI::iniciarGui);
     }
 
-    // ============================================================
-    // SECCIÓN 3: GUI
-    // ============================================================
-
     private static void iniciarGui() {
-
-        //Creación de la ventana principal
-
         JFrame frame = new JFrame("Verti - Analizador");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         JTextArea entradaArea = new JTextArea(12, 60);
-        // Salidas separadas: errores léxicos y sintácticos. La tabla léxica mostrará los tokens con ID.
-        JTextArea lexicoErrOut = new JTextArea(12, 30);
-        JTextArea sintacticoOut = new JTextArea(12, 30);
-        lexicoErrOut.setEditable(false);
-        sintacticoOut.setEditable(false);
-
-        // Área de numeración (gutter) para `entradaArea`
-        entradaArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        entradaArea.setLineWrap(false);
-        JScrollPane entradaScroll = new JScrollPane(entradaArea);
-        JTextArea lineNumbers = new JTextArea("1\n");
-        lineNumbers.setEditable(false);
-        lineNumbers.setBackground(new Color(240,240,240));
-        lineNumbers.setFont(entradaArea.getFont());
-        lineNumbers.setBorder(null);
-        lineNumbers.setMargin(new Insets(4,6,4,6));
-        entradaScroll.setRowHeaderView(lineNumbers);
-
-        // Mantener los números sincronizados con el contenido
-        entradaArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            private void update() { actualizarLineNumbers(entradaArea, lineNumbers); }
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { update(); }
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { update(); }
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { update(); }
-        });
-        // también actualizar al iniciar
-        actualizarLineNumbers(entradaArea, lineNumbers);
+        JScrollPane entradaScroll = crearEditorConNumerosDeLinea(entradaArea);
 
         DefaultTableModel lexicoModel = new DefaultTableModel(
-            new Object[]{"ID", "Tipo", "Token"}, 0) {
-            public boolean isCellEditable(int r, int c) { return false; }
+                new Object[]{"Lexema", "Token", "Error"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
         };
         JTable lexicoTable = new JTable(lexicoModel);
 
+        JTabbedPane analisisTabs = new JTabbedPane();
+        analisisTabs.addTab("Análisis léxico", new JScrollPane(lexicoTable));
+        analisisTabs.addTab("Análisis sintáctico", new JPanel(new BorderLayout()));
+        analisisTabs.addTab("Análisis semántico", new JPanel(new BorderLayout()));
+        analisisTabs.addTab("Código intermedio", new JPanel(new BorderLayout()));
+
+        JButton abrirBtn = new JButton("Abrir archivo");
         JButton analizarBtn = new JButton("Analizar");
         JButton limpiarBtn = new JButton("Limpiar");
+
         JLabel rutaLabel = new JLabel("Archivo: (sin seleccionar)");
 
-        JMenuBar menuBar = new JMenuBar();
-        JMenu menu = new JMenu("File");
-
-        JFileChooser chooser = new JFileChooser();
-        File[] archivoActual = new File[1];
-
-        menu.add("Open").addActionListener(e -> {
-            if (chooser.showOpenDialog(frame) == JFileChooser.APPROVE_OPTION) {
+        abrirBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            int result = chooser.showOpenDialog(frame);
+            if (result == JFileChooser.APPROVE_OPTION) {
                 try {
-                    File f = chooser.getSelectedFile();
-                    archivoActual[0] = f;
-                    entradaArea.setText(Files.readString(f.toPath(), StandardCharsets.UTF_8));
-                    rutaLabel.setText("Archivo: " + f.getName());
+                    String contenido = Files.readString(chooser.getSelectedFile().toPath(), StandardCharsets.UTF_8);
+                    entradaArea.setText(contenido);
+                    rutaLabel.setText("Archivo: " + chooser.getSelectedFile().getName());
                 } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(frame, "Error al leer archivo");
+                    JOptionPane.showMessageDialog(frame,
+                            "No se pudo leer el archivo seleccionado.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
-
-        menu.add("Save").addActionListener(e -> {
-            if (archivoActual[0] != null) {
-                try {
-                    Files.write(archivoActual[0].toPath(), entradaArea.getText().getBytes(StandardCharsets.UTF_8));
-                    rutaLabel.setText("Archivo: " + archivoActual[0].getName());
-                } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(frame, "Error al guardar archivo");
-                }
-            } else {
-                JOptionPane.showMessageDialog(frame, "No hay archivo abierto. Usa 'Save As...'");
-            }
-        });
-
-        menu.add("Save As...").addActionListener(e -> {
-            if (chooser.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {
-                try {
-                    File f = chooser.getSelectedFile();
-                    archivoActual[0] = f;
-                    Files.write(f.toPath(), entradaArea.getText().getBytes(StandardCharsets.UTF_8));
-                    rutaLabel.setText("Archivo: " + f.getName());
-                } catch (IOException ex) {
-                    JOptionPane.showMessageDialog(frame, "Error al guardar archivo");
-                }
-            }
-        });
-
-        menu.addSeparator();
-        menu.add("Exit").addActionListener(e -> System.exit(0));
-        menuBar.add(menu);
-        frame.setJMenuBar(menuBar);
 
         analizarBtn.addActionListener(e -> {
-
-            lexicoModel.setRowCount(0);
-
             String texto = entradaArea.getText();
-            if (texto.trim().isEmpty()) {
-                JOptionPane.showMessageDialog(frame, "Ingresa código.");
+            if (texto == null || texto.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(frame,
+                        "Ingresa o carga un texto para analizar.",
+                        "Aviso",
+                        JOptionPane.WARNING_MESSAGE);
                 return;
             }
-
-            // Análisis léxico (llena la tabla y devuelve mensajes de error léxico)
-            String lexMsg = analizarPrograma(texto, lexicoModel);
-            lexicoErrOut.setText(lexMsg);
-
-            // Análisis sintáctico básico
-            sintacticoOut.setText(analizarSintactico(texto));
+            analizarLexicoYMostrarTabla(texto, lexicoModel);
+            analisisTabs.setSelectedIndex(0);
         });
 
         limpiarBtn.addActionListener(e -> {
             entradaArea.setText("");
             lexicoModel.setRowCount(0);
-            lexicoErrOut.setText("");
-            sintacticoOut.setText("");
+            rutaLabel.setText("Archivo: (sin seleccionar)");
         });
 
-        JPanel topPanel = new JPanel();
+        JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        topPanel.add(abrirBtn);
         topPanel.add(analizarBtn);
         topPanel.add(limpiarBtn);
 
-        // Panel inferior dividido en 3 columnas: Tabla léxica | Errores léxicos | Sintáctico
-        JSplitPane rightSplit = new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT,
-            new JScrollPane(lexicoErrOut),
-            new JScrollPane(sintacticoOut));
+        JPanel rutaPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        rutaPanel.add(rutaLabel);
 
-        JSplitPane bottom = new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT,
-            new JScrollPane(lexicoTable),
-            rightSplit);
+        JSplitPane splitPane = new JSplitPane(
+                JSplitPane.VERTICAL_SPLIT,
+                entradaScroll,
+                analisisTabs);
+        splitPane.setResizeWeight(0.5);
 
-        JSplitPane mainSplit = new JSplitPane(
-            JSplitPane.VERTICAL_SPLIT,
-            entradaScroll,
-            bottom);
-
+        frame.setLayout(new BorderLayout());
         frame.add(topPanel, BorderLayout.NORTH);
-        frame.add(mainSplit, BorderLayout.CENTER);
-        frame.add(rutaLabel, BorderLayout.SOUTH);
-
+        frame.add(splitPane, BorderLayout.CENTER);
+        frame.add(rutaPanel, BorderLayout.SOUTH);
         frame.pack();
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
     }
 
-    // ============================================================
-    // SECCIÓN 4: ANALIZADOR LÉXICO
-    // ============================================================
+    private static JScrollPane crearEditorConNumerosDeLinea(JTextArea entradaArea) {
+        JScrollPane scrollPane = new JScrollPane(entradaArea);
 
-//Funcion que analiza el programa, llena la tabla de tokens y devuelve un string con los errores léxicos encontrados
-    private static String analizarPrograma(String texto, DefaultTableModel modelo) {
+        JTextArea lineasArea = new JTextArea("1");
+        lineasArea.setEditable(false);
+        lineasArea.setFocusable(false);
+        lineasArea.setFont(entradaArea.getFont());
+        lineasArea.setBackground(new Color(245, 245, 245));
+        scrollPane.setRowHeaderView(lineasArea);
 
-        StringBuilder salida = new StringBuilder();
+        Runnable actualizarLineas = () -> {
+            int totalLineas = entradaArea.getLineCount();
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i <= totalLineas; i++) {
+                sb.append(i).append(System.lineSeparator());
+            }
+            lineasArea.setText(sb.toString());
+        };
+
+        entradaArea.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                SwingUtilities.invokeLater(actualizarLineas);
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                SwingUtilities.invokeLater(actualizarLineas);
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                SwingUtilities.invokeLater(actualizarLineas);
+            }
+        });
+
+        return scrollPane;
+    }
+
+    private static void analizarLexicoYMostrarTabla(String texto, DefaultTableModel lexicoModel) {
+        List<LexicoItem> items = analizarLexico(texto);
+        cargarTablaLexica(lexicoModel, items);
+    }
+
+    private static List<LexicoItem> analizarLexico(String texto) {
+        List<LexicoItem> items = new ArrayList<>();
         int i = 0;
+        int linea = 1;
+        int columna = 1;
 
         while (i < texto.length()) {
+            char actual = texto.charAt(i);
 
-            char c = texto.charAt(i);
-
-            if (Character.isWhitespace(c)) {
+            if (Character.isWhitespace(actual)) {
+                if (actual == '\n') {
+                    linea++;
+                    columna = 1;
+                } else {
+                    columna++;
+                }
                 i++;
                 continue;
             }
 
-            // Operadores dobles
-            if (i + 1 < texto.length()) {
-                String doble = texto.substring(i, i + 2);
-                if (tablaTokens.containsKey(doble)) {
-                    agregarToken(doble, modelo);
-                    salida.append("Token: ").append(doble).append("\n");
+            if (actual == '/' && i + 1 < texto.length()) {
+                char siguiente = texto.charAt(i + 1);
+                if (siguiente == '/') {
                     i += 2;
+                    columna += 2;
+                    while (i < texto.length() && texto.charAt(i) != '\n') {
+                        i++;
+                        columna++;
+                    }
+                    continue;
+                }
+                if (siguiente == '*') {
+                    int inicioLinea = linea;
+                    int inicioColumna = columna;
+                    i += 2;
+                    columna += 2;
+                    boolean cerrado = false;
+                    while (i < texto.length()) {
+                        if (texto.charAt(i) == '\n') {
+                            linea++;
+                            columna = 1;
+                            i++;
+                            continue;
+                        }
+                        if (texto.charAt(i) == '*' && i + 1 < texto.length() && texto.charAt(i + 1) == '/') {
+                            i += 2;
+                            columna += 2;
+                            cerrado = true;
+                            break;
+                        }
+                        i++;
+                        columna++;
+                    }
+                    if (!cerrado) {
+                        items.add(new LexicoItem("/*", "error", "Comentario de bloque sin cerrar", inicioLinea, inicioColumna));
+                    }
                     continue;
                 }
             }
 
-            // Símbolos simples
-            String simple = String.valueOf(c);
-            if (tablaTokens.containsKey(simple)) {
-                agregarToken(simple, modelo);
-                salida.append("Token: ").append(simple).append("\n");
-                i++;
-                continue;
-            }
-
-            // Números
-            if (Character.isDigit(c)) {
-                StringBuilder numero = new StringBuilder();
-                while (i < texto.length() &&
-                        Character.isDigit(texto.charAt(i))) {
-                    numero.append(texto.charAt(i));
-                    i++;
+            if (Character.isLetter(actual) || actual == '_') {
+                int inicio = i;
+                int inicioColumna = columna;
+                while (i < texto.length()) {
+                    char c = texto.charAt(i);
+                    if (Character.isLetterOrDigit(c) || c == '_') {
+                        i++;
+                        columna++;
+                    } else {
+                        break;
+                    }
                 }
-                modelo.addRow(new Object[]{100, "Número", numero.toString()});
-                salida.append("Número: ").append(numero).append("\n");
-                continue;
-            }
-
-            // Identificadores
-            if (Character.isLetter(c) || c == '_') {
-                StringBuilder palabra = new StringBuilder();
-                while (i < texto.length() &&
-                        (Character.isLetterOrDigit(texto.charAt(i))
-                                || texto.charAt(i) == '_'
-                                || texto.charAt(i) == '!')) {
-                    palabra.append(texto.charAt(i));
-                    i++;
-                }
-
-                String lexema = palabra.toString();
-
-                if (tablaTokens.containsKey(lexema)) {
-                    agregarToken(lexema, modelo);
-                    salida.append("Reservada: ").append(lexema).append("\n");
+                String lexema = texto.substring(inicio, i);
+                if (LITERALES_BOOLEANOS.contains(lexema)) {
+                    items.add(new LexicoItem(lexema, "booleano", "", linea, inicioColumna));
+                } else if (PALABRAS_RESERVADAS.contains(lexema)) {
+                    items.add(new LexicoItem(lexema, "palabra reservada", "", linea, inicioColumna));
                 } else {
-                    modelo.addRow(new Object[]{101, "Identificador", lexema});
-                    salida.append("Identificador: ").append(lexema).append("\n");
+                    items.add(new LexicoItem(lexema, "identificador", "", linea, inicioColumna));
                 }
                 continue;
             }
 
-            salida.append("Símbolo no reconocido: ")
-                  .append(c)
-                  .append("\n");
+            if (Character.isDigit(actual)) {
+                int inicio = i;
+                int inicioColumna = columna;
+                boolean tienePunto = false;
+                while (i < texto.length()) {
+                    char c = texto.charAt(i);
+                    if (Character.isDigit(c)) {
+                        i++;
+                        columna++;
+                    } else if (c == '.' && !tienePunto && i + 1 < texto.length() && Character.isDigit(texto.charAt(i + 1))) {
+                        tienePunto = true;
+                        i++;
+                        columna++;
+                    } else {
+                        break;
+                    }
+                }
+                String lexemaNumero = texto.substring(inicio, i);
+                items.add(new LexicoItem(lexemaNumero, "numero", "", linea, inicioColumna));
+                continue;
+            }
+
+            if (actual == '"') {
+                int inicioColumna = columna;
+                int inicioLinea = linea;
+                StringBuilder literal = new StringBuilder();
+                literal.append(actual);
+                i++;
+                columna++;
+                boolean cerrado = false;
+
+                while (i < texto.length()) {
+                    char c = texto.charAt(i);
+                    literal.append(c);
+                    i++;
+
+                    if (c == '\n') {
+                        linea++;
+                        columna = 1;
+                    } else {
+                        columna++;
+                    }
+
+                    if (c == '"' && literal.charAt(literal.length() - 2) != '\\') {
+                        cerrado = true;
+                        break;
+                    }
+                }
+
+                if (cerrado) {
+                    items.add(new LexicoItem(literal.toString(), "cadena", "", inicioLinea, inicioColumna));
+                } else {
+                    items.add(new LexicoItem(literal.toString(), "error", "Cadena sin cerrar", inicioLinea, inicioColumna));
+                }
+                continue;
+            }
+
+            if (actual == '-' && i + 1 < texto.length() && texto.charAt(i + 1) == '>') {
+                items.add(new LexicoItem("->", "simbolo", "", linea, columna));
+                i += 2;
+                columna += 2;
+                continue;
+            }
+
+            String simboloSimple = String.valueOf(actual);
+            if (TOKENS_SIMBOLOS.containsKey(simboloSimple) && !"\"".equals(simboloSimple)) {
+                items.add(new LexicoItem(simboloSimple, "simbolo", "", linea, columna));
+                i++;
+                columna++;
+                continue;
+            }
+
+            items.add(new LexicoItem(String.valueOf(actual), "error", "Caracter no reconocido", linea, columna));
             i++;
+            columna++;
         }
 
-        return salida.toString();
+        return items;
     }
 
-    // ============================================================
-    // SECCIÓN 5: MÉTODO AUXILIAR del analisis lexico + 
-    // ============================================================
-
-    private static void agregarToken(String lexema,
-                                     DefaultTableModel modelo) {
-
-        TokenInfo t = tablaTokens.get(lexema);
-        modelo.addRow(new Object[]{t.numero, t.tipo, lexema});
+    private static void cargarTablaLexica(DefaultTableModel lexicoModel, List<LexicoItem> items) {
+        lexicoModel.setRowCount(0);
+        for (LexicoItem item : items) {
+            String errorConPosicion = item.error.isEmpty()
+                    ? ""
+                    : item.error + " [L" + item.linea + ":C" + item.columna + "]";
+            lexicoModel.addRow(new Object[]{item.lexema, item.token, errorConPosicion});
+        }
     }
 
-    private static void actualizarLineNumbers(JTextArea textArea, JTextArea gutter){
-        int lines = textArea.getLineCount();
-        StringBuilder sb = new StringBuilder();
-        for(int i=1;i<=lines;i++){
-            sb.append(i).append(System.lineSeparator());
+    private static class LexicoItem {
+        private final String lexema;
+        private final String token;
+        private final String error;
+        private final int linea;
+        private final int columna;
+
+        private LexicoItem(String lexema, String token, String error, int linea, int columna) {
+            this.lexema = lexema;
+            this.token = token;
+            this.error = error;
+            this.linea = linea;
+            this.columna = columna;
         }
-        // asegurar que siempre haya al menos un número
-        if(sb.length()==0) sb.append("1").append(System.lineSeparator());
-        gutter.setText(sb.toString());
     }
 
-    // Analizador sintáctico básico: verifica balanceo de paréntesis y llaves
-    private static String analizarSintactico(String texto){
-      
-        //Tipo de dato para acumular errores sintácticos encontrados
-        StringBuilder sb = new StringBuilder();
-
-        //=============================================================
-        // Verificar la estrucura de fn main() { }
-        //=============================================================
-
-        /*patron para detectar la funcion main y su estructura
-        //Con la siguiente estrucura (espacios en blanco)fn (espacios) main () {cualquier cosa}(espacios opcionales)
-        */
-        Pattern mainPattern = Pattern.compile("^\\s*fn\\s+main\\s*\\(\\s*\\)\\s*\\{([\\s\\S]*)\\}\\s*$");
-        
-        //Verificar que exista la función main con la estructura correcta
-        Matcher mainMatcher = mainPattern.matcher(texto);
-        
-        if(!mainMatcher.matches()){
-            sb.append("Error sintáctico: La función main no tiene la estructura correcta. Debe ser: fn main() { ... }\n");
-            return sb.toString();
-        }
-
-        //Obtención del cuerpo/contenido del main
-        String mainBody = mainMatcher.group(1);
-
-        //=============================================================
-        // Verificar el balance entre parentesis y llaves
-        //=============================================================
-
-        int parOpen=0, parClose=0, braceOpen=0, braceClose=0;
-        for(char c: texto.toCharArray()){
-            if(c=='(') parOpen++;
-            if(c==')') parClose++;
-            if(c=='{') braceOpen++;
-            if(c=='}') braceClose++;
-
-
-
-        }
-        
-        if(parOpen!=parClose) sb.append("Error sintáctico: paréntesis desbalanceados ("+parOpen+" vs "+parClose+")\n");
-        if(braceOpen!=braceClose) sb.append("Error sintáctico: llaves desbalanceadas ("+braceOpen+" vs "+braceClose+")\n");
-
-        //=============================================================
-        // Verificar que no haya código fuera de main
-         // Cualquier código antes de `fn main` o después de la última `}` es considerado error sintáctico       
-        //=============================================================
-
-        //Encuentra la coincidencia del main y verifica si hay o no algo antes o despupes del main 
-        String antesMain = texto.substring(0, mainMatcher.start()).trim();
-        String despuesMain = texto.substring(mainMatcher.end()).trim();
-        if(!antesMain.isEmpty()) sb.append("Error sintáctico: código antes de la función main no permitido\n");
-        if(!despuesMain.isEmpty()) sb.append("Error sintáctico: código después de la última llave no permitido\n");
-
-
-
-        //=============================================================
-        // Validación de sentencias internas del main
-        //=============================================================
-
-    // Separar sentencias respetando strings
-        List<String> sentencias = new ArrayList<>();// lista para almacenar sentencias completas
-
-        StringBuilder actual = new StringBuilder();//Almacena la sentencia actual 
-        boolean dentroCadena = false;//Variable que permite detectar si etamos o no en el final de una sentencia entre comillas
-
-        for(int i = 0; i < mainBody.length(); i++){//Recorremos el cuerpoa para separa las sentencias +
-            char c = mainBody.charAt(i);
-            if(c == '"'){// Si hay una commilla, alternamos el estado de dentroCadena para saber si estamos dentro o fuera de una cadena
-                dentroCadena = !dentroCadena; // alternar estado
-                actual.append(c);
-                continue;
-            }
-
-            if(c == ';' && !dentroCadena){//Si hay un punto y coma y no estamos dentro de una cadena, consideramos que es el final de una sentencia
-                actual.append(';');
-                sentencias.add(actual.toString());
-                actual.setLength(0);
-                continue;
-            }
-
-            actual.append(c);//Para cualquier otro caracter.
-        }
-
-        // Si quedó algo sin cerrar con ;
-        if(actual.toString().trim().length() > 0){
-            sb.append("Error sintáctico: falta ';' al final de una sentencia.\n");
-        }
-
-    //  Patrones válidos
-    Pattern patronAsignacion = Pattern.compile(
-        "^\\s*let\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*([A-Za-z_][A-Za-z0-9_]*|\\d+)\\s*;\\s*$"
-    );
-
-    Pattern patronPrint = Pattern.compile(
-        "^\\s*(print!|println!)\\s*\\(\\s*(\"[^\"]*\"|[A-Za-z_][A-Za-z0-9_]*)\\s*\\)\\s*;\\s*$"
-    );
-
-    // Validar cada sentencia DEK ARREGLO DE SENTENCIAS
-    for(int i = 0; i < sentencias.size(); i++){
-
-        String sentencia = sentencias.get(i).trim();
-
-        if(sentencia.isEmpty())
-            continue;
-
-        if(patronAsignacion.matcher(sentencia).matches())
-            continue;
-
-        if(patronPrint.matcher(sentencia).matches())
-            continue;
-
-        sb.append("Error sintáctico en sentencia ")
-        .append(i+1)
-        .append(": estructura no válida -> ")
-        .append(sentencia)
-        .append("\n");
-    }
-
-    if(sb.length() == 0)
-        sb.append("Sin errores sintácticos detectados.");
-
-    return sb.toString();
-
-       
-    }
-
-    // Analizador semántico básico: detecta identificadores repetidos declarados con `let`
-    private static String analizarSemantico(String texto){
-        Pattern p = Pattern.compile("\\blet\\s+([A-Za-z_][A-Za-z0-9_]*)");
-        Matcher m = p.matcher(texto);
-        Set<String> seen = new HashSet<>();
-        Set<String> dup = new HashSet<>();
-        while(m.find()){
-            String id = m.group(1);
-            if(!seen.add(id)) dup.add(id);
-        }
-        if(dup.isEmpty()) return "Sin errores semánticos detectados.";
-        StringBuilder sb = new StringBuilder();
-        sb.append("Errores semánticos: identificadores duplicados declarados con 'let':\n");
-        for(String d: dup) sb.append(" - ").append(d).append('\n');
-        return sb.toString();
-    }
 }
