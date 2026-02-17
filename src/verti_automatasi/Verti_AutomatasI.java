@@ -7,6 +7,7 @@ package verti_automatasi;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -14,11 +15,15 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -91,6 +96,8 @@ public class Verti_AutomatasI {
         // Ventana principal del analizador.
         JFrame frame = new JFrame("Verti - Analizador");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        // Referencia al archivo actualmente abierto (null si no hay archivo asociado)
+        AtomicReference<File> currentFile = new AtomicReference<>(null);
 
         // Área de código con numeración de líneas.
         JTextArea entradaArea = new JTextArea(12, 60);
@@ -125,9 +132,11 @@ public class Verti_AutomatasI {
             int result = chooser.showOpenDialog(frame);
             if (result == JFileChooser.APPROVE_OPTION) {
                 try {
-                    String contenido = Files.readString(chooser.getSelectedFile().toPath(), StandardCharsets.UTF_8);
+                    File sel = chooser.getSelectedFile();
+                    String contenido = Files.readString(sel.toPath(), StandardCharsets.UTF_8);
                     entradaArea.setText(contenido);
-                    rutaLabel.setText("Archivo: " + chooser.getSelectedFile().getName());
+                    currentFile.set(sel);
+                    rutaLabel.setText("Archivo: " + sel.getName());
                 } catch (IOException ex) {
                     JOptionPane.showMessageDialog(frame,
                             "No se pudo leer el archivo seleccionado.",
@@ -155,11 +164,72 @@ public class Verti_AutomatasI {
             // Limpia editor, tabla y etiqueta de archivo.
             entradaArea.setText("");
             lexicoModel.setRowCount(0);
+            currentFile.set(null);
             rutaLabel.setText("Archivo: (sin seleccionar)");
         });
 
+        // Barra de menú: File -> Save, Save as..., Exit
+        JMenuBar menuBar = new JMenuBar();
+        JMenu fileMenu = new JMenu("File");
+        JMenuItem openItem = new JMenuItem("Open");
+        JMenuItem saveItem = new JMenuItem("Save");
+        JMenuItem saveAsItem = new JMenuItem("Save as...");
+        JMenuItem exitItem = new JMenuItem("Exit");
+
+        openItem.addActionListener(ev -> {
+            // Reutiliza la acción del botón "Abrir archivo"
+            abrirBtn.doClick();
+        });
+
+        saveItem.addActionListener(ev -> {
+            // Si hay un archivo abierto, sobrescribir; si no, abrir Save As
+            File f = currentFile.get();
+            if (f != null) {
+                try {
+                    Files.writeString(f.toPath(), entradaArea.getText(), StandardCharsets.UTF_8);
+                    JOptionPane.showMessageDialog(frame, "Archivo guardado: " + f.getName(), "Guardado", JOptionPane.INFORMATION_MESSAGE);
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(frame, "No se pudo guardar el archivo.", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            } else {
+                // Delegar a Save As
+                saveAsItem.doClick();
+            }
+        });
+
+        saveAsItem.addActionListener(ev -> {
+            JFileChooser saver = new JFileChooser();
+            int r = saver.showSaveDialog(frame);
+            if (r == JFileChooser.APPROVE_OPTION) {
+                File destino = saver.getSelectedFile();
+                try {
+                    Files.writeString(destino.toPath(), entradaArea.getText(), StandardCharsets.UTF_8);
+                    currentFile.set(destino);
+                    rutaLabel.setText("Archivo: " + destino.getName());
+                    JOptionPane.showMessageDialog(frame, "Archivo guardado: " + destino.getName(), "Guardado", JOptionPane.INFORMATION_MESSAGE);
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(frame, "No se pudo guardar el archivo.", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        exitItem.addActionListener(ev -> {
+            int opcion = JOptionPane.showConfirmDialog(frame, "¿Deseas salir?", "Confirmar salida", JOptionPane.YES_NO_OPTION);
+            if (opcion == JOptionPane.YES_OPTION) {
+                frame.dispose();
+                System.exit(0);
+            }
+        });
+
+        fileMenu.add(openItem);
+        fileMenu.add(saveItem);
+        fileMenu.add(saveAsItem);
+        fileMenu.addSeparator();
+        fileMenu.add(exitItem);
+        menuBar.add(fileMenu);
+        frame.setJMenuBar(menuBar);
+
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        topPanel.add(abrirBtn);
         topPanel.add(analizarBtn);
         topPanel.add(limpiarBtn);
 
@@ -178,6 +248,8 @@ public class Verti_AutomatasI {
         frame.add(rutaPanel, BorderLayout.SOUTH);
         frame.pack();
         frame.setLocationRelativeTo(null);
+        // Abrir en pantalla completa (ventana maximizada)
+        frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
         frame.setVisible(true);
     }
 
