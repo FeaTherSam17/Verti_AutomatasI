@@ -7,14 +7,18 @@ package verti_automatasi;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import javax.swing.JButton;
@@ -113,10 +117,15 @@ public class Verti_AutomatasI {
         };
         JTable lexicoTable = new JTable(lexicoModel);
 
+        JTextArea sintacticoArea = new JTextArea(12, 60);
+        sintacticoArea.setEditable(false);
+        // Fuente compatible para mostrar emojis en los mensajes.
+        sintacticoArea.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 20));
+
         // Secciones de análisis.
         JTabbedPane analisisTabs = new JTabbedPane();
         analisisTabs.addTab("Análisis léxico", new JScrollPane(lexicoTable));
-        analisisTabs.addTab("Análisis sintáctico", new JPanel(new BorderLayout()));
+        analisisTabs.addTab("Análisis sintáctico", new JScrollPane(sintacticoArea));
         analisisTabs.addTab("Análisis semántico", new JPanel(new BorderLayout()));
         //analisisTabs.addTab("Código intermedio", new JPanel(new BorderLayout()));
 
@@ -156,7 +165,8 @@ public class Verti_AutomatasI {
                         JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            analizarLexicoYMostrarTabla(texto, lexicoModel);
+            List<LexicoItem> items = analizarLexicoYMostrarTabla(texto, lexicoModel);
+            analizarSintacticoYMostrarTexto(items, sintacticoArea);
             analisisTabs.setSelectedIndex(0);
         });
 
@@ -164,6 +174,7 @@ public class Verti_AutomatasI {
             // Limpia editor, tabla y etiqueta de archivo.
             entradaArea.setText("");
             lexicoModel.setRowCount(0);
+            sintacticoArea.setText("");
             currentFile.set(null);
             rutaLabel.setText("Archivo: (sin seleccionar)");
         });
@@ -294,10 +305,22 @@ public class Verti_AutomatasI {
         return scrollPane;
     }
 
-    private static void analizarLexicoYMostrarTabla(String texto, DefaultTableModel lexicoModel) {
+    private static List<LexicoItem> analizarLexicoYMostrarTabla(String texto, DefaultTableModel lexicoModel) {
         // Punto de entrada del análisis léxico.
         List<LexicoItem> items = analizarLexico(texto);
         cargarTablaLexica(lexicoModel, items);
+        return items;
+    }
+
+    private static void analizarSintacticoYMostrarTexto(List<LexicoItem> itemsLexicos, JTextArea sintacticoArea) {
+        List<SintacticoError> errores = analizarSintactico(itemsLexicos);
+        cargarTextoSintactico(sintacticoArea, errores);
+    }
+
+    private static List<SintacticoError> analizarSintactico(List<LexicoItem> itemsLexicos) {
+        Parser parser = new Parser(itemsLexicos);
+        parser.parsearPrograma();
+        return parser.getErrores();
     }
 
     private static List<LexicoItem> analizarLexico(String texto) {
@@ -445,17 +468,15 @@ public class Verti_AutomatasI {
 
                 while (i < texto.length()) {
                     char c = texto.charAt(i);
-                    literal.append(c);
-                    i++;
-
                     if (c == '\n') {
-                        linea++;
-                        columna = 1;
-                    } else {
-                        columna++;
+                        break;
                     }
 
-                    if (c == '"' && literal.charAt(literal.length() - 2) != '\\') {
+                    literal.append(c);
+                    i++;
+                    columna++;
+
+                    if (c == '"' && (literal.length() < 2 || literal.charAt(literal.length() - 2) != '\\')) {
                         cerrado = true;
                         break;
                     }
@@ -517,6 +538,29 @@ public class Verti_AutomatasI {
         }
     }
 
+    private static void cargarTextoSintactico(JTextArea sintacticoArea, List<SintacticoError> errores) {
+        // Construye la salida textual del análisis sintáctico.
+        StringBuilder salida = new StringBuilder();
+        if (errores.isEmpty()) {
+            // Mensaje cuando no se detectan errores.
+            salida.append("No hay error 👌👿🔥💪");
+            sintacticoArea.setText(salida.toString());
+            sintacticoArea.setCaretPosition(0);
+            return;
+        }
+
+        // Lista cada error con su línea.
+        for (SintacticoError error : errores) {
+            salida.append("ERROR SINTACTICO en la linea ")
+                    .append(error.linea)
+                    .append(": ")
+                    .append(error.detalle)
+                    .append(System.lineSeparator());
+        }
+        sintacticoArea.setText(salida.toString());
+        sintacticoArea.setCaretPosition(0);
+    }
+
     private static class LexicoItem {
         // Estructura mínima de un token léxico.
         private final String lexema;
@@ -531,6 +575,485 @@ public class Verti_AutomatasI {
             this.error = error;
             this.linea = linea;
             this.columna = columna;
+        }
+    }
+
+    private static class SintacticoError {
+        // Línea donde ocurrió el error.
+        private final int linea;
+        // Columna donde ocurrió el error.
+        private final int columna;
+        // Mensaje descriptivo del error.
+        private final String detalle;
+
+        private SintacticoError(int linea, int columna, String detalle) {
+            this.linea = linea;
+            this.columna = columna;
+            this.detalle = detalle;
+        }
+    }
+
+    private static class ParserToken {
+        // Texto del token.
+        private final String lexema;
+        // Categoría normalizada para el parser.
+        private final String categoria;
+        // Posición de línea del token.
+        private final int linea;
+        // Posición de columna del token.
+        private final int columna;
+
+        private ParserToken(String lexema, String categoria, int linea, int columna) {
+            this.lexema = lexema;
+            this.categoria = categoria;
+            this.linea = linea;
+            this.columna = columna;
+        }
+    }
+
+    // Excepción de control para recuperación de errores.
+    private static class ParseException extends RuntimeException {
+    }
+
+    // Parser descendente recursivo para la gramática definida.
+    private static class Parser {
+        // Flujo de tokens para análisis sintáctico.
+        private final List<ParserToken> tokens;
+        // Lista acumulada de errores sintácticos.
+        private final List<SintacticoError> errores;
+        // Índice del token actual.
+        private int actual;
+
+        // Tipos válidos permitidos por la gramática.
+        private static final Set<String> TIPOS_VALIDOS = new HashSet<>(Arrays.asList(
+                "i32", "f64", "bool", "String", "str", "char"
+        ));
+
+        // Inicializa estado y normaliza tokens de entrada.
+        private Parser(List<LexicoItem> itemsLexicos) {
+            this.tokens = new ArrayList<>();
+            this.errores = new ArrayList<>();
+            this.actual = 0;
+            construirTokens(itemsLexicos);
+        }
+
+        // Devuelve todos los errores detectados.
+        private List<SintacticoError> getErrores() {
+            return errores;
+        }
+
+        // Convierte tokens léxicos al formato interno del parser.
+        private void construirTokens(List<LexicoItem> itemsLexicos) {
+            for (LexicoItem item : itemsLexicos) {
+                // Los comentarios no afectan la sintaxis.
+                if ("comentario_linea".equals(item.token) || "comentario_bloque".equals(item.token)) {
+                    continue;
+                }
+
+                String categoria;
+                switch (item.token) {
+                    case "palabra reservada":
+                        categoria = "PALABRA_RESERVADA";
+                        break;
+                    case "identificador":
+                        categoria = "IDENTIFICADOR";
+                        break;
+                    case "numero":
+                        categoria = "NUMERO";
+                        break;
+                    case "cadena":
+                        categoria = "CADENA";
+                        break;
+                    case "booleano":
+                        categoria = "BOOLEANO";
+                        break;
+                    case "simbolo":
+                        categoria = "SIMBOLO";
+                        break;
+                    default:
+                        continue;
+                }
+
+                // Agrega token válido a la secuencia sintáctica.
+                tokens.add(new ParserToken(item.lexema, categoria, item.linea, item.columna));
+            }
+
+            // Marca explícita de fin de entrada.
+            tokens.add(new ParserToken("EOF", "EOF", -1, -1));
+        }
+
+        // Regla inicial: programa ::= { funcion }.
+        private void parsearPrograma() {
+            while (!esFin()) {
+                try {
+                    if (verificaLexema("fn")) {
+                        parsearFuncion();
+                    } else {
+                        ParserToken token = verActual();
+                        reportarError(token, "Se esperaba 'fn' al inicio de una función");
+                        sincronizarPrograma();
+                    }
+                } catch (ParseException ex) {
+                    sincronizarPrograma();
+                }
+            }
+        }
+
+        // funcion ::= "fn" (identificador|main) ... bloque
+        private void parsearFuncion() {
+            consumirLexema("fn", "Se esperaba 'fn'");
+            consumirNombreFuncion("Se esperaba identificador de función o 'main'");
+            consumirLexema("(", "Se esperaba '(' después del nombre de función");
+
+            if (!verificaLexema(")")) {
+                parsearParametros();
+            }
+
+            consumirLexema(")", "Se esperaba ')' al cerrar parámetros");
+
+            if (coincideLexema("->")) {
+                parsearTipo();
+            }
+
+            parsearBloque();
+        }
+
+        // parametros ::= parametro { "," parametro }
+        private void parsearParametros() {
+            parsearParametro();
+            while (coincideLexema(",")) {
+                parsearParametro();
+            }
+        }
+
+        // parametro ::= identificador ":" tipo
+        private void parsearParametro() {
+            consumirIdentificador("Se esperaba identificador de parámetro");
+            consumirLexema(":", "Se esperaba ':' en el parámetro");
+            parsearTipo();
+        }
+
+        // bloque ::= "{" { sentencia } "}"
+        private void parsearBloque() {
+            consumirLexema("{", "Se esperaba '{' para iniciar bloque");
+
+            while (!verificaLexema("}") && !esFin()) {
+                try {
+                    parsearSentencia();
+                } catch (ParseException ex) {
+                    sincronizarSentencia();
+                }
+            }
+
+            consumirLexema("}", "Se esperaba '}' para cerrar bloque");
+        }
+
+        // Selecciona qué producción de sentencia aplicar.
+        private void parsearSentencia() {
+            if (coincideLexema("let")) {
+                parsearDeclaracion();
+                consumirLexema(";", "Se esperaba ';' después de declaración");
+                return;
+            }
+
+            if (verificaIdentificador() && verificaSiguienteLexema("=")) {
+                parsearAsignacion();
+                consumirLexema(";", "Se esperaba ';' después de asignación");
+                return;
+            }
+
+            if (verificaLexema("print") || verificaLexema("println")) {
+                parsearSalida();
+                consumirLexema(";", "Se esperaba ';' después de salida");
+                return;
+            }
+
+            if (coincideLexema("if")) {
+                parsearIf();
+                return;
+            }
+
+            if (coincideLexema("while")) {
+                parsearWhile();
+                return;
+            }
+
+            if (coincideLexema("loop")) {
+                parsearLoop();
+                return;
+            }
+
+            if (coincideLexema("return")) {
+                parsearReturn();
+                consumirLexema(";", "Se esperaba ';' después de return");
+                return;
+            }
+
+            parsearExpr();
+            consumirLexema(";", "Se esperaba ';' después de expresión");
+        }
+
+        // declaracion ::= let [mut] id [:tipo] [=expr]
+        private void parsearDeclaracion() {
+            coincideLexema("mut");
+            consumirIdentificador("Se esperaba identificador en declaración");
+
+            if (coincideLexema(":")) {
+                parsearTipo();
+            }
+
+            if (coincideLexema("=")) {
+                parsearExpr();
+            }
+        }
+
+        // asignacion ::= identificador "=" expr
+        private void parsearAsignacion() {
+            consumirIdentificador("Se esperaba identificador en asignación");
+            consumirLexema("=", "Se esperaba '=' en asignación");
+            parsearExpr();
+        }
+
+        // salida ::= (print|println) ! ( [argumentos] )
+        private void parsearSalida() {
+            if (!(coincideLexema("print") || coincideLexema("println"))) {
+                ParserToken token = verActual();
+                reportarError(token, "Se esperaba 'print' o 'println'");
+                throw new ParseException();
+            }
+
+            consumirLexema("!", "Se esperaba '!' después de print/println");
+            consumirLexema("(", "Se esperaba '(' en salida");
+
+            if (!verificaLexema(")")) {
+                parsearArgumentos();
+            }
+
+            consumirLexema(")", "Se esperaba ')' en salida");
+        }
+
+        // argumentos ::= expr { "," expr }
+        private void parsearArgumentos() {
+            parsearExpr();
+            while (coincideLexema(",")) {
+                parsearExpr();
+            }
+        }
+
+        // if_stmt ::= if expr bloque [ else (bloque | if_stmt) ]
+        private void parsearIf() {
+            parsearExpr();
+            parsearBloque();
+
+            if (coincideLexema("else")) {
+                if (coincideLexema("if")) {
+                    parsearIf();
+                } else {
+                    parsearBloque();
+                }
+            }
+        }
+
+        // while_stmt ::= while expr bloque
+        private void parsearWhile() {
+            parsearExpr();
+            parsearBloque();
+        }
+
+        // loop_stmt ::= loop bloque
+        private void parsearLoop() {
+            parsearBloque();
+        }
+
+        // return_stmt ::= return [expr]
+        private void parsearReturn() {
+            if (!verificaLexema(";")) {
+                parsearExpr();
+            }
+        }
+
+        // expr ::= termino { (+|-) termino }
+        private void parsearExpr() {
+            parsearTermino();
+            while (coincideLexema("+", "-")) {
+                parsearTermino();
+            }
+        }
+
+        // termino ::= factor { (*|/|%) factor }
+        private void parsearTermino() {
+            parsearFactor();
+            while (coincideLexema("*", "/", "%")) {
+                parsearFactor();
+            }
+        }
+
+        // factor ::= literal | identificador | llamada | (expr)
+        private void parsearFactor() {
+            if (coincideCategoria("NUMERO") || coincideCategoria("CADENA") || coincideCategoria("BOOLEANO")) {
+                return;
+            }
+
+            if (coincideCategoria("IDENTIFICADOR")) {
+                if (coincideLexema("(")) {
+                    if (!verificaLexema(")")) {
+                        parsearArgumentos();
+                    }
+                    consumirLexema(")", "Se esperaba ')' al cerrar llamada");
+                }
+                return;
+            }
+
+            if (coincideLexema("(")) {
+                parsearExpr();
+                consumirLexema(")", "Se esperaba ')' en expresión");
+                return;
+            }
+
+            ParserToken token = verActual();
+            reportarError(token, "Se esperaba literal, identificador, llamada o '(' expresión ')' ");
+            throw new ParseException();
+        }
+
+        // Valida tipos permitidos por el lenguaje.
+        private void parsearTipo() {
+            ParserToken token = verActual();
+            if (TIPOS_VALIDOS.contains(token.lexema)) {
+                avanzar();
+                return;
+            }
+            reportarError(token, "Se esperaba tipo válido (i32, f64, bool, String, str, char)");
+            throw new ParseException();
+        }
+
+        // Intenta consumir cualquiera de los lexemas indicados.
+        private boolean coincideLexema(String... lexemas) {
+            for (String lexema : lexemas) {
+                if (verificaLexema(lexema)) {
+                    avanzar();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Intenta consumir una categoría concreta.
+        private boolean coincideCategoria(String categoria) {
+            if (verificaCategoria(categoria)) {
+                avanzar();
+                return true;
+            }
+            return false;
+        }
+
+        // Verifica lexema sin avanzar.
+        private boolean verificaLexema(String lexema) {
+            if (esFin()) {
+                return false;
+            }
+            return lexema.equals(verActual().lexema);
+        }
+
+        // Verifica el lexema del siguiente token.
+        private boolean verificaSiguienteLexema(String lexema) {
+            if (actual + 1 >= tokens.size()) {
+                return false;
+            }
+            return lexema.equals(tokens.get(actual + 1).lexema);
+        }
+
+        // Verifica categoría sin consumir.
+        private boolean verificaCategoria(String categoria) {
+            if (esFin()) {
+                return false;
+            }
+            return categoria.equals(verActual().categoria);
+        }
+
+        // Verifica si el token actual es identificador.
+        private boolean verificaIdentificador() {
+            return verificaCategoria("IDENTIFICADOR");
+        }
+
+        // Consume un lexema obligatorio o reporta error.
+        private ParserToken consumirLexema(String lexema, String mensaje) {
+            if (verificaLexema(lexema)) {
+                return avanzar();
+            }
+            reportarError(verActual(), mensaje);
+            throw new ParseException();
+        }
+
+        // Consume un identificador obligatorio.
+        private ParserToken consumirIdentificador(String mensaje) {
+            if (verificaIdentificador()) {
+                return avanzar();
+            }
+            reportarError(verActual(), mensaje);
+            throw new ParseException();
+        }
+
+        // Acepta nombre de función como id o main.
+        private ParserToken consumirNombreFuncion(String mensaje) {
+            if (verificaIdentificador() || verificaLexema("main")) {
+                return avanzar();
+            }
+            reportarError(verActual(), mensaje);
+            throw new ParseException();
+        }
+
+        // Registra error sintáctico con posición.
+        private void reportarError(ParserToken token, String mensaje) {
+            errores.add(new SintacticoError(token.linea, token.columna, mensaje));
+        }
+
+        // Salta tokens hasta el inicio de una función.
+        private void sincronizarPrograma() {
+            while (!esFin() && !verificaLexema("fn")) {
+                avanzar();
+            }
+        }
+
+        // Salta tokens hasta un punto seguro de sentencia.
+        private void sincronizarSentencia() {
+            while (!esFin()) {
+                if (verificaLexema(";")) {
+                    avanzar();
+                    return;
+                }
+
+                if (verificaLexema("}") || verificaLexema("let") || verificaLexema("if")
+                        || verificaLexema("while") || verificaLexema("loop")
+                        || verificaLexema("return") || verificaLexema("print")
+                        || verificaLexema("println")) {
+                    return;
+                }
+
+                avanzar();
+            }
+        }
+
+        // Avanza al siguiente token y devuelve el anterior.
+        private ParserToken avanzar() {
+            if (!esFin()) {
+                actual++;
+            }
+            return anterior();
+        }
+
+        // Indica si el parser llegó al final.
+        private boolean esFin() {
+            return "EOF".equals(verActual().categoria);
+        }
+
+        // Obtiene el token actual.
+        private ParserToken verActual() {
+            return tokens.get(actual);
+        }
+
+        // Obtiene el token consumido más reciente.
+        private ParserToken anterior() {
+            return tokens.get(actual - 1);
         }
     }
 
