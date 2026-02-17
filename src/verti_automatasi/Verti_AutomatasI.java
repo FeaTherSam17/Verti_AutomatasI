@@ -37,6 +37,7 @@ import javax.swing.table.DefaultTableModel;
  */
 public class Verti_AutomatasI {
 
+    // Regex base para tipos de lexema.
     private static final String REGEX_IDENTIFICADOR = "[a-zA-Z_][a-zA-Z0-9_]*";
     private static final String REGEX_ENTERO = "[0-9]+";
     private static final String REGEX_FLOTANTE = "[0-9]+\\.[0-9]+";
@@ -48,6 +49,7 @@ public class Verti_AutomatasI {
     private static final String REGEX_COMENTARIO_LINEA = "//[^\\n]*";
     private static final String REGEX_COMENTARIO_BLOQUE = "/\\*[\\s\\S]*?\\*/";
 
+    // Patrones compilados para reutilizar en el análisis.
     private static final Pattern PATRON_IDENTIFICADOR = Pattern.compile(REGEX_IDENTIFICADOR);
     private static final Pattern PATRON_ENTERO = Pattern.compile(REGEX_ENTERO);
     private static final Pattern PATRON_FLOTANTE = Pattern.compile(REGEX_FLOTANTE);
@@ -59,6 +61,7 @@ public class Verti_AutomatasI {
     private static final Pattern PATRON_COMENTARIO_LINEA = Pattern.compile(REGEX_COMENTARIO_LINEA);
     private static final Pattern PATRON_COMENTARIO_BLOQUE = Pattern.compile(REGEX_COMENTARIO_BLOQUE);
 
+    // Catálogo de símbolos permitidos.
     private static final Map<String, String> TOKENS_SIMBOLOS = new LinkedHashMap<>();
 
     static {
@@ -85,12 +88,15 @@ public class Verti_AutomatasI {
     }
 
     private static void iniciarGui() {
+        // Ventana principal del analizador.
         JFrame frame = new JFrame("Verti - Analizador");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
+        // Área de código con numeración de líneas.
         JTextArea entradaArea = new JTextArea(12, 60);
         JScrollPane entradaScroll = crearEditorConNumerosDeLinea(entradaArea);
 
+        // Tabla léxica: lexema, token y error.
         DefaultTableModel lexicoModel = new DefaultTableModel(
                 new Object[]{"Lexema", "Token", "Error"}, 0) {
             @Override
@@ -100,6 +106,7 @@ public class Verti_AutomatasI {
         };
         JTable lexicoTable = new JTable(lexicoModel);
 
+        // Secciones de análisis.
         JTabbedPane analisisTabs = new JTabbedPane();
         analisisTabs.addTab("Análisis léxico", new JScrollPane(lexicoTable));
         analisisTabs.addTab("Análisis sintáctico", new JPanel(new BorderLayout()));
@@ -113,6 +120,7 @@ public class Verti_AutomatasI {
         JLabel rutaLabel = new JLabel("Archivo: (sin seleccionar)");
 
         abrirBtn.addActionListener(e -> {
+            // Carga texto desde archivo al editor.
             JFileChooser chooser = new JFileChooser();
             int result = chooser.showOpenDialog(frame);
             if (result == JFileChooser.APPROVE_OPTION) {
@@ -130,6 +138,7 @@ public class Verti_AutomatasI {
         });
 
         analizarBtn.addActionListener(e -> {
+            // Ejecuta el análisis léxico del contenido actual.
             String texto = entradaArea.getText();
             if (texto == null || texto.trim().isEmpty()) {
                 JOptionPane.showMessageDialog(frame,
@@ -143,6 +152,7 @@ public class Verti_AutomatasI {
         });
 
         limpiarBtn.addActionListener(e -> {
+            // Limpia editor, tabla y etiqueta de archivo.
             entradaArea.setText("");
             lexicoModel.setRowCount(0);
             rutaLabel.setText("Archivo: (sin seleccionar)");
@@ -172,6 +182,7 @@ public class Verti_AutomatasI {
     }
 
     private static JScrollPane crearEditorConNumerosDeLinea(JTextArea entradaArea) {
+        // Scroll del editor y panel de números de línea.
         JScrollPane scrollPane = new JScrollPane(entradaArea);
 
         JTextArea lineasArea = new JTextArea("1");
@@ -182,6 +193,7 @@ public class Verti_AutomatasI {
         scrollPane.setRowHeaderView(lineasArea);
 
         Runnable actualizarLineas = () -> {
+            // Regenera la columna de numeración.
             int totalLineas = entradaArea.getLineCount();
             StringBuilder sb = new StringBuilder();
             for (int i = 1; i <= totalLineas; i++) {
@@ -211,11 +223,13 @@ public class Verti_AutomatasI {
     }
 
     private static void analizarLexicoYMostrarTabla(String texto, DefaultTableModel lexicoModel) {
+        // Punto de entrada del análisis léxico.
         List<LexicoItem> items = analizarLexico(texto);
         cargarTablaLexica(lexicoModel, items);
     }
 
     private static List<LexicoItem> analizarLexico(String texto) {
+        // Recorrido secuencial del texto fuente.
         List<LexicoItem> items = new ArrayList<>();
         int i = 0;
         int linea = 1;
@@ -224,6 +238,7 @@ public class Verti_AutomatasI {
         while (i < texto.length()) {
             char actual = texto.charAt(i);
 
+            // Ignora espacios y actualiza posición.
             if (PATRON_ESPACIOS.matcher(String.valueOf(actual)).matches()) {
                 if (actual == '\n') {
                     linea++;
@@ -235,6 +250,7 @@ public class Verti_AutomatasI {
                 continue;
             }
 
+            // Reconoce comentarios de línea y bloque.
             if (actual == '/' && i + 1 < texto.length()) {
                 char siguiente = texto.charAt(i + 1);
                 if (siguiente == '/') {
@@ -292,6 +308,7 @@ public class Verti_AutomatasI {
                 }
             }
 
+            // Reconoce identificadores, booleanos y palabras reservadas.
             if (Character.isLetter(actual) || actual == '_') {
                 int inicio = i;
                 int inicioColumna = columna;
@@ -317,6 +334,7 @@ public class Verti_AutomatasI {
                 continue;
             }
 
+            // Reconoce números enteros y flotantes.
             if (Character.isDigit(actual)) {
                 int inicio = i;
                 int inicioColumna = columna;
@@ -343,6 +361,7 @@ public class Verti_AutomatasI {
                 continue;
             }
 
+            // Reconoce cadenas entre comillas dobles.
             if (actual == '"') {
                 int inicioColumna = columna;
                 int inicioLinea = linea;
@@ -383,6 +402,7 @@ public class Verti_AutomatasI {
                 continue;
             }
 
+            // Reconoce símbolo compuesto: flecha.
             if (actual == '-' && i + 1 < texto.length() && texto.charAt(i + 1) == '>') {
                 String simboloFlecha = "->";
                 if (PATRON_SIMBOLO.matcher(simboloFlecha).matches()) {
@@ -395,6 +415,7 @@ public class Verti_AutomatasI {
                 continue;
             }
 
+            // Reconoce símbolos simples definidos.
             String simboloSimple = String.valueOf(actual);
             if (TOKENS_SIMBOLOS.containsKey(simboloSimple) && !"\"".equals(simboloSimple)
                     && PATRON_SIMBOLO.matcher(simboloSimple).matches()) {
@@ -404,6 +425,7 @@ public class Verti_AutomatasI {
                 continue;
             }
 
+            // Cualquier otro carácter se marca como error.
             items.add(new LexicoItem(String.valueOf(actual), "error", "Caracter no reconocido", linea, columna));
             i++;
             columna++;
@@ -413,6 +435,7 @@ public class Verti_AutomatasI {
     }
 
     private static void cargarTablaLexica(DefaultTableModel lexicoModel, List<LexicoItem> items) {
+        // Carga los resultados en la tabla de la GUI.
         lexicoModel.setRowCount(0);
         for (LexicoItem item : items) {
             String errorConPosicion = item.error.isEmpty()
@@ -423,6 +446,7 @@ public class Verti_AutomatasI {
     }
 
     private static class LexicoItem {
+        // Estructura mínima de un token léxico.
         private final String lexema;
         private final String token;
         private final String error;

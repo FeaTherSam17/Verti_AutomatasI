@@ -1,6 +1,10 @@
 let fuera: i32 = 1;                    // válido (variable global)
 @ $ ¿                                  // ERROR léxico: símbolos no reconocidos
-/* XDDDD */
+/* 
+Prueba
+comentario
+multilinea
+*/
 fn main() {
 
     println!("Inicio de pruebas");     // válido
