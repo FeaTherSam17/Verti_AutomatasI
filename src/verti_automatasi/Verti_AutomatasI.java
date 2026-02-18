@@ -752,19 +752,19 @@ public class Verti_AutomatasI {
         private void parsearSentencia() {
             if (coincideLexema("let")) {
                 parsearDeclaracion();
-                consumirLexema(";", "Se esperaba ';' después de declaración");
+                consumirPuntoYComa("después de declaración");
                 return;
             }
 
             if (verificaIdentificador() && verificaSiguienteLexema("=")) {
                 parsearAsignacion();
-                consumirLexema(";", "Se esperaba ';' después de asignación");
+                consumirPuntoYComa("después de asignación");
                 return;
             }
 
             if (verificaLexema("print") || verificaLexema("println")) {
                 parsearSalida();
-                consumirLexema(";", "Se esperaba ';' después de salida");
+                consumirPuntoYComa("después de salida");
                 return;
             }
 
@@ -785,12 +785,12 @@ public class Verti_AutomatasI {
 
             if (coincideLexema("return")) {
                 parsearReturn();
-                consumirLexema(";", "Se esperaba ';' después de return");
+                consumirPuntoYComa("después de return");
                 return;
             }
 
             parsearExpr();
-            consumirLexema(";", "Se esperaba ';' después de expresión");
+            consumirPuntoYComa("después de expresión");
         }
 
         // declaracion ::= let [mut] id [:tipo] [=expr]
@@ -922,7 +922,18 @@ public class Verti_AutomatasI {
                 avanzar();
                 return;
             }
-            reportarError(token, "Se esperaba tipo válido (i32, f64, bool, String, str, char)");
+
+            // Si falta tipo después de ':' o '->', reporta en la línea de esa marca.
+            ParserToken referencia = actual > 0 ? anterior() : token;
+            if ((":".equals(referencia.lexema) || "->".equals(referencia.lexema)) && referencia.linea > 0) {
+                errores.add(new SintacticoError(
+                        referencia.linea,
+                        referencia.columna,
+                        "Se esperaba tipo válido (i32, f64, bool, String, str, char)"
+                ));
+            } else {
+                reportarError(token, "Se esperaba tipo válido (i32, f64, bool, String, str, char)");
+            }
             throw new ParseException();
         }
 
@@ -984,6 +995,17 @@ public class Verti_AutomatasI {
             throw new ParseException();
         }
 
+        // Reporta ';' faltante usando la línea de la sentencia previa.
+        private ParserToken consumirPuntoYComa(String contexto) {
+            if (verificaLexema(";")) {
+                return avanzar();
+            }
+
+            ParserToken referencia = actual > 0 ? anterior() : verActual();
+            reportarError(referencia, "Se esperaba ';' " + contexto);
+            throw new ParseException();
+        }
+
         // Consume un identificador obligatorio.
         private ParserToken consumirIdentificador(String mensaje) {
             if (verificaIdentificador()) {
@@ -1022,10 +1044,15 @@ public class Verti_AutomatasI {
                     return;
                 }
 
+                // También permite reanudar cuando inicia una sentencia con identificador.
+                if (verificaIdentificador()) {
+                    return;
+                }
+
                 if (verificaLexema("}") || verificaLexema("let") || verificaLexema("if")
                         || verificaLexema("while") || verificaLexema("loop")
                         || verificaLexema("return") || verificaLexema("print")
-                        || verificaLexema("println")) {
+                        || verificaLexema("println") || verificaLexema("fn")) {
                     return;
                 }
 
