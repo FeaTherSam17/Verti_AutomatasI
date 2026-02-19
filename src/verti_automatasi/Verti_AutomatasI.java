@@ -143,6 +143,9 @@ public class Verti_AutomatasI {
         lexicoScroll.getVerticalScrollBar().setPreferredSize(new Dimension(20, Integer.MAX_VALUE));
         lexicoScroll.getVerticalScrollBar().setUnitIncrement(16);
         lexicoScroll.getHorizontalScrollBar().setPreferredSize(new Dimension(20, Integer.MAX_VALUE));
+        // Cambiar la fuente de las pestañas
+        analisisTabs.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        //Agregar pestañas de análisis
         analisisTabs.addTab("Análisis léxico", lexicoScroll);
         analisisTabs.addTab("Análisis sintáctico", new JScrollPane(sintacticoArea));
         analisisTabs.addTab("Análisis semántico", new JScrollPane(semanticoArea));
