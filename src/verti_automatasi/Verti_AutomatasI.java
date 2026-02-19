@@ -52,7 +52,7 @@ public class Verti_AutomatasI {
     private static final String REGEX_FLOTANTE = "[0-9]+\\.[0-9]+";
     private static final String REGEX_CADENA = "\"[^\"]*\"";
     private static final String REGEX_BOOLEANO = "true|false";
-    private static final String REGEX_PALABRA_RESERVADA = "println|print|fn|main|let|mut|i32|f64|bool|String|str|char|if|else|loop|while|for|return";
+    private static final String REGEX_PALABRA_RESERVADA = "println|print|fn|main|let|mut|i8|i16|i32|i64|f8|f16|f32|f64|bool|String|str|char|if|else|loop|while|for|return";
     private static final String REGEX_SIMBOLO = "->|!|\\(|\\)|,|\\\"|\\{|\\}|;|:|=|\\+|-|\\*|/|%";
     private static final String REGEX_ESPACIOS = "[ \\t\\n\\r]+";
     private static final String REGEX_COMENTARIO_LINEA = "//[^\\n]*";
@@ -543,7 +543,8 @@ public class Verti_AutomatasI {
         StringBuilder salida = new StringBuilder();
         if (errores.isEmpty()) {
             // Mensaje cuando no se detectan errores.
-            salida.append("No hay error 👌👿🔥💪");
+            // salida.append("No hay error 👌👿🔥💪");
+            salida.append("No se detectó ningun error sintáctico");
             sintacticoArea.setText(salida.toString());
             sintacticoArea.setCaretPosition(0);
             return;
@@ -626,7 +627,7 @@ public class Verti_AutomatasI {
 
         // Tipos válidos permitidos por la gramática.
         private static final Set<String> TIPOS_VALIDOS = new HashSet<>(Arrays.asList(
-                "i32", "f64", "bool", "String", "str", "char"
+            "i8", "i16", "i32", "i64", "f8", "f16", "f32", "f64", "bool", "String", "str", "char"
         ));
 
         // Inicializa estado y normaliza tokens de entrada.
