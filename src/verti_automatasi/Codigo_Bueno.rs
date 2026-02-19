@@ -8,16 +8,20 @@ fn sumar(a: i32, b: i32) -> i32 {
 }
 
 fn main() {
-    let mut x: i32 = 10;
+    let mut x: i16 = 10;
     let y: i32 = 5;
     let texto: String = "Hola";
     let bandera: bool = true;
 
-    print!("Inicio -> ", x, y, texto);
+    print!("Inicio -> ", x, y, "");
     println!("Suma inicial: ", sumar(x, y));
 
     x = x + y * 2;
     sumar(x, y);
+
+    let Name:String = "Milton el Insano";
+    let Age:i8 = 21;
+    print!("Name = {}, Age = {}", Name, Age);
 
     if es_verdadero() {
         println!("Entró al if", x);
