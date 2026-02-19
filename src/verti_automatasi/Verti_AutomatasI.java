@@ -93,7 +93,7 @@ public class Verti_AutomatasI {
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(Verti_AutomatasI::iniciarGui);
+        SwingUtilities.invokeLater(Verti_AutomatasI::iniciarGui); 
     }
 
     private static void iniciarGui() {
