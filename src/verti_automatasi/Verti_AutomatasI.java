@@ -12,8 +12,11 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -122,11 +125,14 @@ public class Verti_AutomatasI {
         // Fuente compatible para mostrar emojis en los mensajes.
         sintacticoArea.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 20));
 
+        JTextArea semanticoArea = new JTextArea(12, 60);
+        semanticoArea.setEditable(false);
+
         // Secciones de análisis.
         JTabbedPane analisisTabs = new JTabbedPane();
         analisisTabs.addTab("Análisis léxico", new JScrollPane(lexicoTable));
         analisisTabs.addTab("Análisis sintáctico", new JScrollPane(sintacticoArea));
-        analisisTabs.addTab("Análisis semántico", new JPanel(new BorderLayout()));
+        analisisTabs.addTab("Análisis semántico", new JScrollPane(semanticoArea));
         //analisisTabs.addTab("Código intermedio", new JPanel(new BorderLayout()));
 
         JButton abrirBtn = new JButton("Abrir archivo");
@@ -167,6 +173,7 @@ public class Verti_AutomatasI {
             }
             List<LexicoItem> items = analizarLexicoYMostrarTabla(texto, lexicoModel);
             analizarSintacticoYMostrarTexto(items, sintacticoArea);
+            analizarSemanticoYMostrarTexto(items, semanticoArea);
             analisisTabs.setSelectedIndex(0);
         });
 
@@ -175,6 +182,7 @@ public class Verti_AutomatasI {
             entradaArea.setText("");
             lexicoModel.setRowCount(0);
             sintacticoArea.setText("");
+            semanticoArea.setText("");
             currentFile.set(null);
             rutaLabel.setText("Archivo: (sin seleccionar)");
         });
@@ -321,6 +329,17 @@ public class Verti_AutomatasI {
         Parser parser = new Parser(itemsLexicos);
         parser.parsearPrograma();
         return parser.getErrores();
+    }
+
+    private static void analizarSemanticoYMostrarTexto(List<LexicoItem> itemsLexicos, JTextArea semanticoArea) {
+        List<SemanticoError> errores = analizarSemantico(itemsLexicos);
+        cargarTextoSemantico(semanticoArea, errores);
+    }
+
+    private static List<SemanticoError> analizarSemantico(List<LexicoItem> itemsLexicos) {
+        AnalizadorSemantico analizador = new AnalizadorSemantico(itemsLexicos);
+        analizador.analizarPrograma();
+        return analizador.getErrores();
     }
 
     private static List<LexicoItem> analizarLexico(String texto) {
@@ -562,6 +581,27 @@ public class Verti_AutomatasI {
         sintacticoArea.setCaretPosition(0);
     }
 
+    private static void cargarTextoSemantico(JTextArea semanticoArea, List<SemanticoError> errores) {
+        StringBuilder salida = new StringBuilder();
+        if (errores.isEmpty()) {
+            salida.append("No hay error semántico");
+            semanticoArea.setText(salida.toString());
+            semanticoArea.setCaretPosition(0);
+            return;
+        }
+
+        for (SemanticoError error : errores) {
+            salida.append("ERROR SEMANTICO en la linea ")
+                    .append(error.linea)
+                    .append(": ")
+                    .append(error.detalle)
+                    .append(System.lineSeparator());
+        }
+
+        semanticoArea.setText(salida.toString());
+        semanticoArea.setCaretPosition(0);
+    }
+
     private static class LexicoItem {
         // Estructura mínima de un token léxico.
         private final String lexema;
@@ -591,6 +631,829 @@ public class Verti_AutomatasI {
             this.linea = linea;
             this.columna = columna;
             this.detalle = detalle;
+        }
+    }
+
+    private static class SemanticoError {
+        // Línea donde ocurrió el error semántico.
+        private final int linea;
+        // Mensaje de error semántico.
+        private final String detalle;
+
+        private SemanticoError(int linea, String detalle) {
+            this.linea = linea;
+            this.detalle = detalle;
+        }
+    }
+
+    private static class Simbolo {
+        // Nombre del identificador.
+        private final String nombre;
+        // Tipo del símbolo.
+        private final String tipo;
+        // Indica si permite asignaciones posteriores.
+        private final boolean esMutable;
+        // Nivel de ámbito donde fue declarado.
+        private final int ambito;
+        // Indica si tiene valor asignado.
+        private boolean inicializada;
+        // Marca cuando el símbolo representa una función.
+        private final boolean esFuncion;
+        // Tipos de parámetros para funciones.
+        private final List<String> tiposParametros;
+
+        private Simbolo(String nombre, String tipo, boolean esMutable, int ambito, boolean inicializada,
+                boolean esFuncion, List<String> tiposParametros) {
+            this.nombre = nombre;
+            this.tipo = tipo;
+            this.esMutable = esMutable;
+            this.ambito = ambito;
+            this.inicializada = inicializada;
+            this.esFuncion = esFuncion;
+            this.tiposParametros = tiposParametros;
+        }
+    }
+
+    private static class TablaSimbolos {
+        // Pila de ámbitos activos.
+        private final Deque<Map<String, Simbolo>> pilaAmbitos = new ArrayDeque<>();
+
+        // Entra a un nuevo ámbito.
+        private void entrarAmbito() {
+            pilaAmbitos.push(new HashMap<>());
+        }
+
+        // Sale del ámbito actual.
+        private void salirAmbito() {
+            if (!pilaAmbitos.isEmpty()) {
+                pilaAmbitos.pop();
+            }
+        }
+
+        // Nivel actual de anidación.
+        private int nivelActual() {
+            return Math.max(0, pilaAmbitos.size() - 1);
+        }
+
+        // Declara variable en el ámbito actual.
+        private boolean declararVariable(String nombre, String tipo, boolean esMutable, boolean inicializada) {
+            if (pilaAmbitos.isEmpty()) {
+                entrarAmbito();
+            }
+            Map<String, Simbolo> ambitoActual = pilaAmbitos.peek();
+            if (ambitoActual.containsKey(nombre)) {
+                return false;
+            }
+            ambitoActual.put(nombre,
+                    new Simbolo(nombre, tipo, esMutable, nivelActual(), inicializada, false, new ArrayList<>()));
+            return true;
+        }
+
+        // Declara función en el ámbito global.
+        private boolean declararFuncion(String nombre, String tipoRetorno, List<String> tiposParametros) {
+            if (pilaAmbitos.isEmpty()) {
+                entrarAmbito();
+            }
+
+            Map<String, Simbolo> ambitoGlobal = null;
+            for (Map<String, Simbolo> ambito : pilaAmbitos) {
+                ambitoGlobal = ambito;
+            }
+            if (ambitoGlobal == null) {
+                ambitoGlobal = pilaAmbitos.peek();
+            }
+
+            if (ambitoGlobal.containsKey(nombre)) {
+                return false;
+            }
+
+            ambitoGlobal.put(nombre,
+                    new Simbolo(nombre, tipoRetorno, false, 0, true, true, new ArrayList<>(tiposParametros)));
+            return true;
+        }
+
+        // Busca símbolo desde el ámbito más interno.
+        private Simbolo buscar(String nombre) {
+            for (Map<String, Simbolo> ambito : pilaAmbitos) {
+                if (ambito.containsKey(nombre)) {
+                    return ambito.get(nombre);
+                }
+            }
+            return null;
+        }
+    }
+
+    private static class SemanticoParseException extends RuntimeException {
+    }
+
+    private static class AnalizadorSemantico {
+        // Flujo de tokens para análisis semántico.
+        private final List<ParserToken> tokens;
+        // Errores semánticos acumulados.
+        private final List<SemanticoError> errores;
+        // Tabla de símbolos con ámbitos.
+        private final TablaSimbolos tabla;
+        // Índice de token actual.
+        private int actual;
+
+        private static final Set<String> TIPOS_VALIDOS = new HashSet<>(Arrays.asList(
+                "i8", "i16", "i32", "i64", "f8", "f16", "f32", "f64", "bool", "String", "str", "char"
+        ));
+
+        // Inicializa el analizador semántico.
+        private AnalizadorSemantico(List<LexicoItem> itemsLexicos) {
+            this.tokens = new ArrayList<>();
+            this.errores = new ArrayList<>();
+            this.tabla = new TablaSimbolos();
+            this.actual = 0;
+            construirTokens(itemsLexicos);
+        }
+
+        // Devuelve los errores semánticos encontrados.
+        private List<SemanticoError> getErrores() {
+            return errores;
+        }
+
+        // Ejecuta el análisis semántico completo.
+        private void analizarPrograma() {
+            tabla.entrarAmbito();
+            registrarFunciones();
+            actual = 0;
+
+            while (!esFin()) {
+                try {
+                    if (verificaLexema("fn")) {
+                        analizarFuncion();
+                    } else {
+                        avanzar();
+                    }
+                } catch (SemanticoParseException ex) {
+                    sincronizarPrograma();
+                }
+            }
+        }
+
+        // Convierte tokens léxicos al formato del semántico.
+        private void construirTokens(List<LexicoItem> itemsLexicos) {
+            for (LexicoItem item : itemsLexicos) {
+                if ("comentario_linea".equals(item.token) || "comentario_bloque".equals(item.token)) {
+                    continue;
+                }
+
+                String categoria;
+                switch (item.token) {
+                    case "palabra reservada":
+                        categoria = "PALABRA_RESERVADA";
+                        break;
+                    case "identificador":
+                        categoria = "IDENTIFICADOR";
+                        break;
+                    case "numero":
+                        categoria = "NUMERO";
+                        break;
+                    case "cadena":
+                        categoria = "CADENA";
+                        break;
+                    case "booleano":
+                        categoria = "BOOLEANO";
+                        break;
+                    case "simbolo":
+                        categoria = "SIMBOLO";
+                        break;
+                    default:
+                        continue;
+                }
+
+                tokens.add(new ParserToken(item.lexema, categoria, item.linea, item.columna));
+            }
+
+            tokens.add(new ParserToken("EOF", "EOF", -1, -1));
+        }
+
+        // Primera pasada para registrar funciones.
+        private void registrarFunciones() {
+            int i = 0;
+            while (i < tokens.size()) {
+                ParserToken token = tokens.get(i);
+                if (!"fn".equals(token.lexema)) {
+                    i++;
+                    continue;
+                }
+
+                if (i + 1 >= tokens.size()) {
+                    break;
+                }
+
+                ParserToken nombreTok = tokens.get(i + 1);
+                if (!("IDENTIFICADOR".equals(nombreTok.categoria) || "main".equals(nombreTok.lexema))) {
+                    i++;
+                    continue;
+                }
+
+                int cursor = i + 2;
+                List<String> tiposParametros = new ArrayList<>();
+                if (cursor < tokens.size() && "(".equals(tokens.get(cursor).lexema)) {
+                    cursor++;
+                    while (cursor < tokens.size() && !")".equals(tokens.get(cursor).lexema)) {
+                        if (cursor + 2 < tokens.size() && "IDENTIFICADOR".equals(tokens.get(cursor).categoria)
+                                && ":".equals(tokens.get(cursor + 1).lexema)
+                                && esTipoValido(tokens.get(cursor + 2).lexema)) {
+                            tiposParametros.add(tokens.get(cursor + 2).lexema);
+                            cursor += 3;
+                            if (cursor < tokens.size() && ",".equals(tokens.get(cursor).lexema)) {
+                                cursor++;
+                            }
+                        } else {
+                            cursor++;
+                        }
+                    }
+                }
+
+                String tipoRetorno = "unit";
+                if (cursor + 1 < tokens.size() && "->".equals(tokens.get(cursor + 1).lexema)) {
+                    if (cursor + 2 < tokens.size()) {
+                        tipoRetorno = tokens.get(cursor + 2).lexema;
+                    }
+                }
+
+                boolean declarada = tabla.declararFuncion(nombreTok.lexema, tipoRetorno, tiposParametros);
+                if (!declarada) {
+                    errores.add(new SemanticoError(nombreTok.linea,
+                            "La función '" + nombreTok.lexema + "' ya fue declarada"));
+                }
+
+                i++;
+            }
+        }
+
+        // Analiza una función y su cuerpo.
+        private void analizarFuncion() {
+            consumirLexema("fn");
+            ParserToken nombre = consumirNombreFuncion();
+            consumirLexema("(");
+
+            tabla.entrarAmbito();
+
+            if (!verificaLexema(")")) {
+                analizarParametros();
+            }
+
+            consumirLexema(")");
+
+            String tipoRetorno = "unit";
+            if (coincideLexema("->")) {
+                tipoRetorno = consumirTipo();
+            }
+
+            analizarBloque(tipoRetorno);
+            tabla.salirAmbito();
+
+            if (nombre != null && "main".equals(nombre.lexema) && !"unit".equals(tipoRetorno)) {
+                errores.add(new SemanticoError(nombre.linea,
+                        "La función 'main' no debería declarar tipo de retorno"));
+            }
+        }
+
+        // Registra parámetros como símbolos del ámbito de función.
+        private void analizarParametros() {
+            analizarParametro();
+            while (coincideLexema(",")) {
+                analizarParametro();
+            }
+        }
+
+        private void analizarParametro() {
+            ParserToken nombre = consumirIdentificador();
+            consumirLexema(":");
+            String tipo = consumirTipo();
+
+            if (nombre != null && tipo != null) {
+                boolean declarada = tabla.declararVariable(nombre.lexema, tipo, true, true);
+                if (!declarada) {
+                    errores.add(new SemanticoError(nombre.linea,
+                            "La variable '" + nombre.lexema + "' ya fue declarada en este ámbito"));
+                }
+            }
+        }
+
+        // Analiza un bloque con su propio ámbito.
+        private void analizarBloque(String tipoRetornoFuncion) {
+            consumirLexema("{");
+            tabla.entrarAmbito();
+
+            while (!verificaLexema("}") && !esFin()) {
+                try {
+                    analizarSentencia(tipoRetornoFuncion);
+                } catch (SemanticoParseException ex) {
+                    sincronizarSentencia();
+                }
+            }
+
+            consumirLexema("}");
+            tabla.salirAmbito();
+        }
+
+        // Despacha la validación por tipo de sentencia.
+        private void analizarSentencia(String tipoRetornoFuncion) {
+            if (coincideLexema("let")) {
+                analizarDeclaracion();
+                consumirLexema(";");
+                return;
+            }
+
+            if (verificaCategoria("IDENTIFICADOR") && verificaSiguienteLexema("=")) {
+                analizarAsignacion();
+                consumirLexema(";");
+                return;
+            }
+
+            if (verificaLexema("print") || verificaLexema("println")) {
+                analizarSalida();
+                consumirLexema(";");
+                return;
+            }
+
+            if (coincideLexema("if")) {
+                analizarIf(tipoRetornoFuncion);
+                return;
+            }
+
+            if (coincideLexema("while")) {
+                String tipoCond = analizarExpr();
+                if (!"bool".equals(tipoCond) && !"desconocido".equals(tipoCond)) {
+                    errores.add(new SemanticoError(anterior().linea,
+                            "La condición del 'while' debe ser booleana"));
+                }
+                analizarBloque(tipoRetornoFuncion);
+                return;
+            }
+
+            if (coincideLexema("loop")) {
+                analizarBloque(tipoRetornoFuncion);
+                return;
+            }
+
+            if (coincideLexema("return")) {
+                String tipoRet = "unit";
+                if (!verificaLexema(";")) {
+                    tipoRet = analizarExpr();
+                }
+                if (!sonTiposCompatibles(tipoRetornoFuncion, tipoRet)) {
+                    errores.add(new SemanticoError(anterior().linea,
+                            "Tipo de retorno incorrecto: se esperaba '" + tipoRetornoFuncion
+                            + "', se encontró '" + tipoRet + "'"));
+                }
+                consumirLexema(";");
+                return;
+            }
+
+            analizarExpr();
+            consumirLexema(";");
+        }
+
+        // Valida declaración y compatibilidad de tipo inicial.
+        private void analizarDeclaracion() {
+            boolean esMutable = coincideLexema("mut");
+            ParserToken nombre = consumirIdentificador();
+
+            String tipoDeclarado = null;
+            if (coincideLexema(":")) {
+                tipoDeclarado = consumirTipo();
+            }
+
+            String tipoValor = null;
+            boolean inicializada = false;
+            if (coincideLexema("=")) {
+                tipoValor = analizarExpr();
+                inicializada = true;
+            }
+
+            String tipoFinal = tipoDeclarado != null ? tipoDeclarado : tipoValor;
+            if (tipoFinal == null) {
+                tipoFinal = "desconocido";
+            }
+
+            if (nombre != null) {
+                boolean declarada = tabla.declararVariable(nombre.lexema, tipoFinal, esMutable, inicializada);
+                if (!declarada) {
+                    errores.add(new SemanticoError(nombre.linea,
+                            "La variable '" + nombre.lexema + "' ya fue declarada en este ámbito"));
+                }
+            }
+
+            if (tipoDeclarado != null && tipoValor != null && !sonTiposCompatibles(tipoDeclarado, tipoValor)) {
+                int linea = nombre != null ? nombre.linea : verActual().linea;
+                errores.add(new SemanticoError(linea,
+                        "Tipo incorrecto: se esperaba '" + tipoDeclarado + "', se encontró '" + tipoValor + "'"));
+            }
+        }
+
+        // Valida existencia, mutabilidad y tipos en asignación.
+        private void analizarAsignacion() {
+            ParserToken nombre = consumirIdentificador();
+            consumirLexema("=");
+            String tipoValor = analizarExpr();
+
+            if (nombre == null) {
+                return;
+            }
+
+            Simbolo simbolo = tabla.buscar(nombre.lexema);
+            if (simbolo == null) {
+                errores.add(new SemanticoError(nombre.linea,
+                        "Variable '" + nombre.lexema + "' no declarada"));
+                return;
+            }
+
+            if (!simbolo.esMutable) {
+                errores.add(new SemanticoError(nombre.linea,
+                        "No se puede asignar a '" + nombre.lexema + "' porque no es mutable"));
+            }
+
+            if (!sonTiposCompatibles(simbolo.tipo, tipoValor)) {
+                errores.add(new SemanticoError(nombre.linea,
+                        "Tipo incorrecto: se esperaba '" + simbolo.tipo + "', se encontró '" + tipoValor + "'"));
+            }
+
+            simbolo.inicializada = true;
+        }
+
+        // Valida argumentos de print/println y tipos imprimibles.
+        private void analizarSalida() {
+            ParserToken salidaTok = coincideLexema("print") ? anterior() : null;
+            if (salidaTok == null && coincideLexema("println")) {
+                salidaTok = anterior();
+            }
+
+            consumirLexema("!");
+            consumirLexema("(");
+
+            int placeholders = -1;
+            int parametrosFormato = 0;
+
+            if (!verificaLexema(")")) {
+                ParserToken posibleFormato = verActual();
+                List<String> tiposArgs = new ArrayList<>();
+                tiposArgs.add(analizarExpr());
+
+                if ("CADENA".equals(posibleFormato.categoria)) {
+                    placeholders = contarPlaceholders(posibleFormato.lexema);
+                }
+
+                while (coincideLexema(",")) {
+                    tiposArgs.add(analizarExpr());
+                    parametrosFormato++;
+                }
+
+                for (String tipoArg : tiposArgs) {
+                    if (!"desconocido".equals(tipoArg) && !esTipoImprimible(tipoArg)) {
+                        int linea = salidaTok != null ? salidaTok.linea : verActual().linea;
+                        errores.add(new SemanticoError(linea,
+                                "El tipo '" + tipoArg + "' no se puede imprimir"));
+                    }
+                }
+
+                if (placeholders > 0 && placeholders != parametrosFormato) {
+                    int linea = salidaTok != null ? salidaTok.linea : verActual().linea;
+                    errores.add(new SemanticoError(linea,
+                            "Cantidad de placeholders '{}' (" + placeholders
+                            + ") no coincide con parámetros de formato (" + parametrosFormato + ")"));
+                }
+            }
+
+            consumirLexema(")");
+        }
+
+        // Cuenta ocurrencias de '{}' en literales de formato.
+        private int contarPlaceholders(String literalCadena) {
+            if (literalCadena == null || literalCadena.length() < 2) {
+                return 0;
+            }
+
+            String contenido = literalCadena.substring(1, literalCadena.length() - 1);
+            int contador = 0;
+            for (int i = 0; i < contenido.length() - 1; i++) {
+                if (contenido.charAt(i) == '{' && contenido.charAt(i + 1) == '}') {
+                    contador++;
+                    i++;
+                }
+            }
+            return contador;
+        }
+
+        // Analiza argumentos y devuelve tipos inferidos.
+        private List<String> analizarArgumentos() {
+            List<String> tipos = new ArrayList<>();
+            tipos.add(analizarExpr());
+            while (coincideLexema(",")) {
+                tipos.add(analizarExpr());
+            }
+            return tipos;
+        }
+
+        // Valida condición booleana y bloques if/else.
+        private void analizarIf(String tipoRetornoFuncion) {
+            String tipoCond = analizarExpr();
+            if (!"bool".equals(tipoCond) && !"desconocido".equals(tipoCond)) {
+                errores.add(new SemanticoError(anterior().linea,
+                        "La condición del 'if' debe ser booleana"));
+            }
+
+            analizarBloque(tipoRetornoFuncion);
+
+            if (coincideLexema("else")) {
+                if (coincideLexema("if")) {
+                    analizarIf(tipoRetornoFuncion);
+                } else {
+                    analizarBloque(tipoRetornoFuncion);
+                }
+            }
+        }
+
+        // Analiza expresión con precedencia de suma/resta.
+        private String analizarExpr() {
+            String tipoIzq = analizarTermino();
+            while (coincideLexema("+", "-")) {
+                ParserToken op = anterior();
+                String tipoDer = analizarTermino();
+                tipoIzq = combinarTiposAritmeticos(tipoIzq, tipoDer, op);
+            }
+            return tipoIzq;
+        }
+
+        // Analiza término con precedencia de multiplicación/división.
+        private String analizarTermino() {
+            String tipoIzq = analizarFactor();
+            while (coincideLexema("*", "/", "%")) {
+                ParserToken op = anterior();
+                String tipoDer = analizarFactor();
+                tipoIzq = combinarTiposAritmeticos(tipoIzq, tipoDer, op);
+            }
+            return tipoIzq;
+        }
+
+        // Analiza factor: literal, variable, llamada o subexpresión.
+        private String analizarFactor() {
+            if (coincideCategoria("NUMERO")) {
+                String lexema = anterior().lexema;
+                return lexema.contains(".") ? "f64" : "i32";
+            }
+
+            if (coincideCategoria("CADENA")) {
+                return "String";
+            }
+
+            if (coincideCategoria("BOOLEANO")) {
+                return "bool";
+            }
+
+            if (coincideCategoria("IDENTIFICADOR")) {
+                ParserToken id = anterior();
+
+                if (coincideLexema("(")) {
+                    List<String> tiposArgs = new ArrayList<>();
+                    if (!verificaLexema(")")) {
+                        tiposArgs = analizarArgumentos();
+                    }
+                    consumirLexema(")");
+                    return validarLlamadaFuncion(id, tiposArgs);
+                }
+
+                Simbolo simbolo = tabla.buscar(id.lexema);
+                if (simbolo == null) {
+                    errores.add(new SemanticoError(id.linea,
+                            "Variable '" + id.lexema + "' no declarada"));
+                    return "desconocido";
+                }
+
+                if (!simbolo.inicializada) {
+                    errores.add(new SemanticoError(id.linea,
+                            "Variable '" + id.lexema + "' usada antes de inicializar"));
+                }
+
+                return simbolo.tipo;
+            }
+
+            if (coincideLexema("(")) {
+                String tipo = analizarExpr();
+                consumirLexema(")");
+                return tipo;
+            }
+
+            ParserToken token = verActual();
+            errores.add(new SemanticoError(token.linea,
+                    "Expresión inválida para análisis semántico"));
+            throw new SemanticoParseException();
+        }
+
+        // Valida llamada a función y retorna tipo de retorno.
+        private String validarLlamadaFuncion(ParserToken id, List<String> tiposArgs) {
+            Simbolo funcion = tabla.buscar(id.lexema);
+            if (funcion == null || !funcion.esFuncion) {
+                errores.add(new SemanticoError(id.linea,
+                        "Función '" + id.lexema + "' no declarada"));
+                return "desconocido";
+            }
+
+            if (funcion.tiposParametros.size() != tiposArgs.size()) {
+                errores.add(new SemanticoError(id.linea,
+                        "Cantidad de argumentos incorrecta en llamada a '" + id.lexema + "'"));
+            } else {
+                for (int i = 0; i < tiposArgs.size(); i++) {
+                    if (!sonTiposCompatibles(funcion.tiposParametros.get(i), tiposArgs.get(i))) {
+                        errores.add(new SemanticoError(id.linea,
+                                "Tipo de argumento incorrecto en llamada a '" + id.lexema + "'"));
+                        break;
+                    }
+                }
+            }
+
+            return funcion.tipo;
+        }
+
+        // Combina tipos aritméticos y valida operandos numéricos.
+        private String combinarTiposAritmeticos(String izq, String der, ParserToken operador) {
+            if (!sonTiposNumericos(izq) || !sonTiposNumericos(der)) {
+                errores.add(new SemanticoError(operador.linea,
+                        "Operación aritmética requiere tipos numéricos"));
+                return "desconocido";
+            }
+
+            if (esTipoFlotante(izq) || esTipoFlotante(der)) {
+                return "f64";
+            }
+            return "i32";
+        }
+
+        // Consume lexema obligatorio para avanzar el análisis.
+        private ParserToken consumirLexema(String lexema) {
+            if (verificaLexema(lexema)) {
+                return avanzar();
+            }
+            throw new SemanticoParseException();
+        }
+
+        // Consume identificador o main para nombre de función.
+        private ParserToken consumirNombreFuncion() {
+            if (verificaCategoria("IDENTIFICADOR") || verificaLexema("main")) {
+                return avanzar();
+            }
+            throw new SemanticoParseException();
+        }
+
+        // Consume identificador para variables/parámetros.
+        private ParserToken consumirIdentificador() {
+            if (verificaCategoria("IDENTIFICADOR")) {
+                return avanzar();
+            }
+            throw new SemanticoParseException();
+        }
+
+        // Consume y valida tipo permitido.
+        private String consumirTipo() {
+            if (esTipoValido(verActual().lexema)) {
+                return avanzar().lexema;
+            }
+            throw new SemanticoParseException();
+        }
+
+        // Sincroniza hasta inicio probable de función.
+        private void sincronizarPrograma() {
+            while (!esFin() && !verificaLexema("fn")) {
+                avanzar();
+            }
+        }
+
+        // Sincroniza hasta frontera probable de sentencia.
+        private void sincronizarSentencia() {
+            while (!esFin()) {
+                if (verificaLexema(";")) {
+                    avanzar();
+                    return;
+                }
+
+                if (verificaLexema("}") || verificaLexema("let") || verificaLexema("if")
+                        || verificaLexema("while") || verificaLexema("loop")
+                        || verificaLexema("return") || verificaLexema("print")
+                        || verificaLexema("println") || verificaLexema("fn")
+                        || verificaCategoria("IDENTIFICADOR")) {
+                    return;
+                }
+
+                avanzar();
+            }
+        }
+
+        // Verifica si el token actual coincide con lexema.
+        private boolean verificaLexema(String lexema) {
+            if (esFin()) {
+                return false;
+            }
+            return lexema.equals(verActual().lexema);
+        }
+
+        // Verifica si el siguiente token coincide con lexema.
+        private boolean verificaSiguienteLexema(String lexema) {
+            if (actual + 1 >= tokens.size()) {
+                return false;
+            }
+            return lexema.equals(tokens.get(actual + 1).lexema);
+        }
+
+        // Verifica categoría del token actual.
+        private boolean verificaCategoria(String categoria) {
+            if (esFin()) {
+                return false;
+            }
+            return categoria.equals(verActual().categoria);
+        }
+
+        // Consume si coincide alguno de los lexemas.
+        private boolean coincideLexema(String... lexemas) {
+            for (String lexema : lexemas) {
+                if (verificaLexema(lexema)) {
+                    avanzar();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Consume si coincide la categoría.
+        private boolean coincideCategoria(String categoria) {
+            if (verificaCategoria(categoria)) {
+                avanzar();
+                return true;
+            }
+            return false;
+        }
+
+        // Avanza al siguiente token.
+        private ParserToken avanzar() {
+            if (!esFin()) {
+                actual++;
+            }
+            return anterior();
+        }
+
+        // Indica fin de entrada.
+        private boolean esFin() {
+            return "EOF".equals(verActual().categoria);
+        }
+
+        // Devuelve token actual.
+        private ParserToken verActual() {
+            return tokens.get(actual);
+        }
+
+        // Devuelve token anterior consumido.
+        private ParserToken anterior() {
+            return tokens.get(actual - 1);
+        }
+
+        // Verifica tipos numéricos soportados.
+        private boolean sonTiposNumericos(String tipo) {
+            return tipo != null && tipo.matches("i(8|16|32|64)|f(8|16|32|64)");
+        }
+
+        // Verifica si el tipo es flotante.
+        private boolean esTipoFlotante(String tipo) {
+            return tipo != null && tipo.matches("f(8|16|32|64)");
+        }
+
+        // Reglas de compatibilidad entre tipos.
+        private boolean sonTiposCompatibles(String esperado, String recibido) {
+            if (esperado == null || recibido == null) {
+                return false;
+            }
+            if ("unit".equals(esperado) && "unit".equals(recibido)) {
+                return true;
+            }
+            if (esperado.equals(recibido)) {
+                return true;
+            }
+            if (sonTiposNumericos(esperado) && sonTiposNumericos(recibido)) {
+                return true;
+            }
+            if (("String".equals(esperado) && "str".equals(recibido))
+                    || ("str".equals(esperado) && "String".equals(recibido))) {
+                return true;
+            }
+            return "desconocido".equals(recibido);
+        }
+
+        // Determina si un tipo se puede imprimir en salida.
+        private boolean esTipoImprimible(String tipo) {
+            return sonTiposNumericos(tipo)
+                    || "bool".equals(tipo)
+                    || "String".equals(tipo)
+                    || "str".equals(tipo)
+                    || "char".equals(tipo);
+        }
+
+        // Verifica si un lexema es tipo permitido.
+        private boolean esTipoValido(String tipo) {
+            return TIPOS_VALIDOS.contains(tipo);
         }
     }
 
@@ -930,10 +1793,10 @@ public class Verti_AutomatasI {
                 errores.add(new SintacticoError(
                         referencia.linea,
                         referencia.columna,
-                        "Se esperaba tipo válido (i32, f64, bool, String, str, char)"
+                        "Se esperaba tipo válido (i8, i16, i32, i64, f8, f16, f32, f64, bool, String, str, char)"
                 ));
             } else {
-                reportarError(token, "Se esperaba tipo válido (i32, f64, bool, String, str, char)");
+                reportarError(token, "Se esperaba tipo válido (i8, i16, i32, i64, f8, f16, f32, f64, bool, String, str, char)");
             }
             throw new ParseException();
         }
