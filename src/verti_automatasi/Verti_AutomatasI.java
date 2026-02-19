@@ -8,6 +8,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Dimension;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -107,7 +108,8 @@ public class Verti_AutomatasI {
         AtomicReference<File> currentFile = new AtomicReference<>(null);
 
         // Área de código con numeración de líneas.
-        JTextArea entradaArea = new JTextArea(12, 60);
+        JTextArea entradaArea = new JTextArea(24, 100);
+        entradaArea.setFont(new Font("Monospaced", Font.PLAIN, 18));
         JScrollPane entradaScroll = crearEditorConNumerosDeLinea(entradaArea);
 
         // Tabla léxica: lexema, token y error.
@@ -119,18 +121,29 @@ public class Verti_AutomatasI {
             }
         };
         JTable lexicoTable = new JTable(lexicoModel);
+        // Aumentar tamaño de fuente y altura de fila para mejor legibilidad
+        lexicoTable.setFont(new Font("SansSerif", Font.PLAIN, 15));
+        lexicoTable.setRowHeight(22);
+        lexicoTable.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 15));
 
         JTextArea sintacticoArea = new JTextArea(12, 60);
         sintacticoArea.setEditable(false);
         // Fuente compatible para mostrar emojis en los mensajes.
-        sintacticoArea.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 20));
+            sintacticoArea.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 22));
 
         JTextArea semanticoArea = new JTextArea(12, 60);
         semanticoArea.setEditable(false);
+        // Usar la misma fuente y tamaño que el área de análisis sintáctico
+            semanticoArea.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 22));
 
         // Secciones de análisis.
         JTabbedPane analisisTabs = new JTabbedPane();
-        analisisTabs.addTab("Análisis léxico", new JScrollPane(lexicoTable));
+        JScrollPane lexicoScroll = new JScrollPane(lexicoTable);
+        // Hacer la barra de desplazamiento más ancha y más rápida
+        lexicoScroll.getVerticalScrollBar().setPreferredSize(new Dimension(20, Integer.MAX_VALUE));
+        lexicoScroll.getVerticalScrollBar().setUnitIncrement(16);
+        lexicoScroll.getHorizontalScrollBar().setPreferredSize(new Dimension(20, Integer.MAX_VALUE));
+        analisisTabs.addTab("Análisis léxico", lexicoScroll);
         analisisTabs.addTab("Análisis sintáctico", new JScrollPane(sintacticoArea));
         analisisTabs.addTab("Análisis semántico", new JScrollPane(semanticoArea));
         //analisisTabs.addTab("Código intermedio", new JPanel(new BorderLayout()));
@@ -140,6 +153,13 @@ public class Verti_AutomatasI {
         JButton limpiarBtn = new JButton("Limpiar");
 
         JLabel rutaLabel = new JLabel("Archivo: (sin seleccionar)");
+
+        // Aumentar tamaño de fuente de controles generales
+        Font controlFont = new Font("SansSerif", Font.PLAIN, 16);
+        abrirBtn.setFont(controlFont);
+        analizarBtn.setFont(controlFont);
+        limpiarBtn.setFont(controlFont);
+        rutaLabel.setFont(new Font("SansSerif", Font.PLAIN, 15));
 
         abrirBtn.addActionListener(e -> {
             // Carga texto desde archivo al editor.
@@ -194,6 +214,15 @@ public class Verti_AutomatasI {
         JMenuItem saveItem = new JMenuItem("Save");
         JMenuItem saveAsItem = new JMenuItem("Save as...");
         JMenuItem exitItem = new JMenuItem("Exit");
+
+        // Ajustar fuentes de menú para coherencia
+        Font menuFont = new Font("SansSerif", Font.PLAIN, 15);
+        menuBar.setFont(menuFont);
+        fileMenu.setFont(menuFont);
+        openItem.setFont(menuFont);
+        saveItem.setFont(menuFont);
+        saveAsItem.setFont(menuFont);
+        exitItem.setFont(menuFont);
 
         openItem.addActionListener(ev -> {
             // Reutiliza la acción del botón "Abrir archivo"
