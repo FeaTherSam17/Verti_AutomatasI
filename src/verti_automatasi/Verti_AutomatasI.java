@@ -6,9 +6,9 @@ package verti_automatasi;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.Dimension;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -136,6 +136,10 @@ public class Verti_AutomatasI {
         // Usar la misma fuente y tamaño que el área de análisis sintáctico
             semanticoArea.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 22));
 
+        JTextArea intermedioArea = new JTextArea(12, 60);
+        intermedioArea.setEditable(false);
+        intermedioArea.setFont(new Font("Monospaced", Font.PLAIN, 16));
+
         // Secciones de análisis.
         JTabbedPane analisisTabs = new JTabbedPane();
         JScrollPane lexicoScroll = new JScrollPane(lexicoTable);
@@ -149,7 +153,7 @@ public class Verti_AutomatasI {
         analisisTabs.addTab("Análisis léxico", lexicoScroll);
         analisisTabs.addTab("Análisis sintáctico", new JScrollPane(sintacticoArea));
         analisisTabs.addTab("Análisis semántico", new JScrollPane(semanticoArea));
-        //analisisTabs.addTab("Código intermedio", new JPanel(new BorderLayout()));
+        analisisTabs.addTab("Código intermedio", new JScrollPane(intermedioArea));
 
         JButton abrirBtn = new JButton("Abrir archivo");
         JButton analizarBtn = new JButton("Analizar");
@@ -197,6 +201,7 @@ public class Verti_AutomatasI {
             List<LexicoItem> items = analizarLexicoYMostrarTabla(texto, lexicoModel);
             analizarSintacticoYMostrarTexto(items, sintacticoArea);
             analizarSemanticoYMostrarTexto(items, semanticoArea);
+            analizarIntermedioYMostrarTexto(items, intermedioArea);
             analisisTabs.setSelectedIndex(0);
         });
 
@@ -206,6 +211,7 @@ public class Verti_AutomatasI {
             lexicoModel.setRowCount(0);
             sintacticoArea.setText("");
             semanticoArea.setText("");
+            intermedioArea.setText("");
             currentFile.set(null);
             rutaLabel.setText("Archivo: (sin seleccionar)");
         });
@@ -372,6 +378,16 @@ public class Verti_AutomatasI {
         AnalizadorSemantico analizador = new AnalizadorSemantico(itemsLexicos);
         analizador.analizarPrograma();
         return analizador.getErrores();
+    }
+
+    private static void analizarIntermedioYMostrarTexto(List<LexicoItem> itemsLexicos, JTextArea intermedioArea) {
+        List<ExpresionIntermedia> expresiones = analizarCodigoIntermedio(itemsLexicos);
+        cargarTextoIntermedio(intermedioArea, expresiones);
+    }
+
+    private static List<ExpresionIntermedia> analizarCodigoIntermedio(List<LexicoItem> itemsLexicos) {
+        GeneradorCodigoIntermedio generador = new GeneradorCodigoIntermedio(itemsLexicos);
+        return generador.generar();
     }
 
     private static List<LexicoItem> analizarLexico(String texto) {
@@ -632,6 +648,409 @@ public class Verti_AutomatasI {
 
         semanticoArea.setText(salida.toString());
         semanticoArea.setCaretPosition(0);
+    }
+
+    private static void cargarTextoIntermedio(JTextArea intermedioArea, List<ExpresionIntermedia> expresiones) {
+        StringBuilder salida = new StringBuilder();
+
+        if (expresiones.isEmpty()) {
+            salida.append("No se encontraron expresiones de asignación para generar código intermedio.");
+            intermedioArea.setText(salida.toString());
+            intermedioArea.setCaretPosition(0);
+            return;
+        }
+
+        for (ExpresionIntermedia expresion : expresiones) {
+            salida.append("Línea ")
+                    .append(expresion.linea)
+                    .append(" -> ")
+                    .append(expresion.destino)
+                    .append(" = ")
+                    .append(expresion.infijo)
+                    .append(System.lineSeparator());
+            salida.append("Infijo   : ").append(expresion.infijo).append(System.lineSeparator());
+            salida.append("Prefijo  : ").append(expresion.prefijo).append(System.lineSeparator());
+            salida.append("Postfijo : ").append(expresion.postfijo).append(System.lineSeparator());
+            salida.append("Cuádruplos:").append(System.lineSeparator());
+            salida.append(String.format("%-4s | %-8s | %-12s | %-12s | %-12s%n",
+                    "#", "Operador", "Arg1", "Arg2", "Resultado"));
+
+            for (Cuadruplo cuadruplo : expresion.cuadruplos) {
+                salida.append(String.format("%-4d | %-8s | %-12s | %-12s | %-12s%n",
+                        cuadruplo.indice,
+                        cuadruplo.operador,
+                        cuadruplo.arg1,
+                        cuadruplo.arg2,
+                        cuadruplo.resultado));
+            }
+            salida.append(System.lineSeparator());
+        }
+
+        intermedioArea.setText(salida.toString());
+        intermedioArea.setCaretPosition(0);
+    }
+
+    private static class ExpresionIntermedia {
+        private final int linea;
+        private final String destino;
+        private final String infijo;
+        private final String prefijo;
+        private final String postfijo;
+        private final List<Cuadruplo> cuadruplos;
+
+        private ExpresionIntermedia(int linea, String destino, String infijo,
+                String prefijo, String postfijo, List<Cuadruplo> cuadruplos) {
+            this.linea = linea;
+            this.destino = destino;
+            this.infijo = infijo;
+            this.prefijo = prefijo;
+            this.postfijo = postfijo;
+            this.cuadruplos = cuadruplos;
+        }
+    }
+
+    private static class Cuadruplo {
+        private final int indice;
+        private final String operador;
+        private final String arg1;
+        private final String arg2;
+        private final String resultado;
+
+        private Cuadruplo(int indice, String operador, String arg1, String arg2, String resultado) {
+            this.indice = indice;
+            this.operador = operador;
+            this.arg1 = arg1;
+            this.arg2 = arg2;
+            this.resultado = resultado;
+        }
+    }
+
+    private static class GeneradorCodigoIntermedio {
+        private final List<ParserToken> tokens;
+
+        private GeneradorCodigoIntermedio(List<LexicoItem> itemsLexicos) {
+            this.tokens = new ArrayList<>();
+            construirTokens(itemsLexicos);
+        }
+
+        private List<ExpresionIntermedia> generar() {
+            List<ExpresionIntermedia> resultado = new ArrayList<>();
+            int i = 0;
+
+            while (i < tokens.size()) {
+                ParserToken token = tokens.get(i);
+                if ("EOF".equals(token.categoria)) {
+                    break;
+                }
+
+                if ("let".equals(token.lexema)) {
+                    int[] nuevoIndice = procesarDeclaracion(resultado, i);
+                    i = nuevoIndice[0];
+                    continue;
+                }
+
+                if ("IDENTIFICADOR".equals(token.categoria)
+                        && i + 1 < tokens.size()
+                        && "=".equals(tokens.get(i + 1).lexema)) {
+                    int[] nuevoIndice = procesarAsignacion(resultado, i);
+                    i = nuevoIndice[0];
+                    continue;
+                }
+
+                i++;
+            }
+
+            return resultado;
+        }
+
+        private int[] procesarDeclaracion(List<ExpresionIntermedia> salida, int inicio) {
+            int i = inicio + 1;
+            if (i < tokens.size() && "mut".equals(tokens.get(i).lexema)) {
+                i++;
+            }
+
+            if (i >= tokens.size() || !"IDENTIFICADOR".equals(tokens.get(i).categoria)) {
+                return new int[]{avanzarHastaFinSentencia(inicio)};
+            }
+
+            String destino = tokens.get(i).lexema;
+            int linea = tokens.get(i).linea;
+            i++;
+
+            if (i < tokens.size() && ":".equals(tokens.get(i).lexema)) {
+                i++;
+                if (i < tokens.size()) {
+                    i++;
+                }
+            }
+
+            if (i >= tokens.size() || !"=".equals(tokens.get(i).lexema)) {
+                return new int[]{avanzarHastaFinSentencia(i)};
+            }
+
+            i++;
+            int finExpr = buscarFinExpresion(i);
+            if (finExpr <= i) {
+                return new int[]{Math.min(finExpr + 1, tokens.size())};
+            }
+
+            List<String> expr = extraerExpresion(i, finExpr);
+            ExpresionIntermedia intermedia = construirExpresion(linea, destino, expr);
+            if (intermedia != null) {
+                salida.add(intermedia);
+            }
+
+            return new int[]{Math.min(finExpr + 1, tokens.size())};
+        }
+
+        private int[] procesarAsignacion(List<ExpresionIntermedia> salida, int inicio) {
+            String destino = tokens.get(inicio).lexema;
+            int linea = tokens.get(inicio).linea;
+            int i = inicio + 2;
+            int finExpr = buscarFinExpresion(i);
+
+            if (finExpr <= i) {
+                return new int[]{Math.min(finExpr + 1, tokens.size())};
+            }
+
+            List<String> expr = extraerExpresion(i, finExpr);
+            ExpresionIntermedia intermedia = construirExpresion(linea, destino, expr);
+            if (intermedia != null) {
+                salida.add(intermedia);
+            }
+
+            return new int[]{Math.min(finExpr + 1, tokens.size())};
+        }
+
+        private ExpresionIntermedia construirExpresion(int linea, String destino, List<String> exprInfija) {
+            if (exprInfija.isEmpty()) {
+                return null;
+            }
+
+            List<String> postfijo = convertirInfijoAPostfijo(exprInfija);
+            if (postfijo.isEmpty()) {
+                return null;
+            }
+
+            String prefijo = convertirPostfijoAPrefijo(postfijo);
+            List<Cuadruplo> cuadruplos = construirCuadruplos(postfijo, destino);
+
+            return new ExpresionIntermedia(
+                    linea,
+                    destino,
+                    String.join(" ", exprInfija),
+                    prefijo,
+                    String.join(" ", postfijo),
+                    cuadruplos
+            );
+        }
+
+        private List<String> extraerExpresion(int inicio, int finExclusivo) {
+            List<String> expresion = new ArrayList<>();
+            for (int i = inicio; i < finExclusivo && i < tokens.size(); i++) {
+                String lexema = tokens.get(i).lexema;
+                if (esOperador(lexema) || "(".equals(lexema) || ")".equals(lexema) || esOperando(lexema)) {
+                    expresion.add(lexema);
+                }
+            }
+            return expresion;
+        }
+
+        private int buscarFinExpresion(int inicio) {
+            int profundidadParentesis = 0;
+            int i = inicio;
+            while (i < tokens.size()) {
+                String lexema = tokens.get(i).lexema;
+                if ("(".equals(lexema)) {
+                    profundidadParentesis++;
+                } else if (")".equals(lexema) && profundidadParentesis > 0) {
+                    profundidadParentesis--;
+                } else if (";".equals(lexema) && profundidadParentesis == 0) {
+                    return i;
+                }
+                i++;
+            }
+            return i;
+        }
+
+        private int avanzarHastaFinSentencia(int indice) {
+            int i = Math.max(0, indice);
+            while (i < tokens.size() && !";".equals(tokens.get(i).lexema) && !"EOF".equals(tokens.get(i).categoria)) {
+                i++;
+            }
+            return Math.min(i + 1, tokens.size());
+        }
+
+        private List<String> convertirInfijoAPostfijo(List<String> infijo) {
+            List<String> salida = new ArrayList<>();
+            Deque<String> operadores = new ArrayDeque<>();
+
+            for (String token : infijo) {
+                if (esOperando(token)) {
+                    salida.add(token);
+                    continue;
+                }
+
+                if ("(".equals(token)) {
+                    operadores.push(token);
+                    continue;
+                }
+
+                if (")".equals(token)) {
+                    while (!operadores.isEmpty() && !"(".equals(operadores.peek())) {
+                        salida.add(operadores.pop());
+                    }
+                    if (!operadores.isEmpty() && "(".equals(operadores.peek())) {
+                        operadores.pop();
+                    }
+                    continue;
+                }
+
+                if (esOperador(token)) {
+                    while (!operadores.isEmpty()
+                            && esOperador(operadores.peek())
+                            && precedencia(operadores.peek()) >= precedencia(token)) {
+                        salida.add(operadores.pop());
+                    }
+                    operadores.push(token);
+                }
+            }
+
+            while (!operadores.isEmpty()) {
+                String op = operadores.pop();
+                if (!"(".equals(op) && !")".equals(op)) {
+                    salida.add(op);
+                }
+            }
+
+            return salida;
+        }
+
+        private String convertirPostfijoAPrefijo(List<String> postfijo) {
+            Deque<String> pila = new ArrayDeque<>();
+
+            for (String token : postfijo) {
+                if (esOperando(token)) {
+                    pila.push(token);
+                    continue;
+                }
+
+                if (esOperador(token) && pila.size() >= 2) {
+                    String der = pila.pop();
+                    String izq = pila.pop();
+                    pila.push(token + " " + izq + " " + der);
+                }
+            }
+
+            return pila.isEmpty() ? "" : pila.peek();
+        }
+
+        private List<Cuadruplo> construirCuadruplos(List<String> postfijo, String destino) {
+            List<Cuadruplo> cuadruplos = new ArrayList<>();
+            Deque<String> pila = new ArrayDeque<>();
+            int temp = 0;
+            int indice = 1;
+
+            for (String token : postfijo) {
+                if (esOperando(token)) {
+                    pila.push(token);
+                    continue;
+                }
+
+                if (esOperador(token) && pila.size() >= 2) {
+                    String der = pila.pop();
+                    String izq = pila.pop();
+                    String temporal = "t" + (++temp);
+                    cuadruplos.add(new Cuadruplo(indice++, token, izq, der, temporal));
+                    pila.push(temporal);
+                }
+            }
+
+            if (!pila.isEmpty()) {
+                String resultadoExpr = pila.pop();
+                cuadruplos.add(new Cuadruplo(indice, "=", resultadoExpr, "", destino));
+            }
+
+            return cuadruplos;
+        }
+
+        private boolean esOperador(String lexema) {
+            return "+".equals(lexema)
+                    || "-".equals(lexema)
+                    || "*".equals(lexema)
+                    || "/".equals(lexema)
+                    || "%".equals(lexema);
+        }
+
+        private boolean esOperando(String lexema) {
+            if (lexema == null || lexema.isEmpty()) {
+                return false;
+            }
+
+            if ("true".equals(lexema) || "false".equals(lexema)) {
+                return true;
+            }
+
+            if (lexema.startsWith("\"") && lexema.endsWith("\"") && lexema.length() >= 2) {
+                return true;
+            }
+
+            return PATRON_IDENTIFICADOR.matcher(lexema).matches()
+                    || PATRON_ENTERO.matcher(lexema).matches()
+                    || PATRON_FLOTANTE.matcher(lexema).matches();
+        }
+
+        private int precedencia(String operador) {
+            switch (operador) {
+                case "*":
+                case "/":
+                case "%":
+                    return 2;
+                case "+":
+                case "-":
+                    return 1;
+                default:
+                    return 0;
+            }
+        }
+
+        private void construirTokens(List<LexicoItem> itemsLexicos) {
+            for (LexicoItem item : itemsLexicos) {
+                if ("comentario_linea".equals(item.token)
+                        || "comentario_bloque".equals(item.token)
+                        || "error".equals(item.token)) {
+                    continue;
+                }
+
+                String categoria;
+                switch (item.token) {
+                    case "palabra reservada":
+                        categoria = "PALABRA_RESERVADA";
+                        break;
+                    case "identificador":
+                        categoria = "IDENTIFICADOR";
+                        break;
+                    case "numero":
+                        categoria = "NUMERO";
+                        break;
+                    case "cadena":
+                        categoria = "CADENA";
+                        break;
+                    case "booleano":
+                        categoria = "BOOLEANO";
+                        break;
+                    case "simbolo":
+                        categoria = "SIMBOLO";
+                        break;
+                    default:
+                        continue;
+                }
+
+                tokens.add(new ParserToken(item.lexema, categoria, item.linea, item.columna));
+            }
+
+            tokens.add(new ParserToken("EOF", "EOF", -1, -1));
+        }
     }
 
     private static class LexicoItem {
