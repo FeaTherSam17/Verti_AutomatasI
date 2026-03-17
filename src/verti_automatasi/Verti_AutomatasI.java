@@ -654,13 +654,14 @@ public class Verti_AutomatasI {
         StringBuilder salida = new StringBuilder();
 
         if (expresiones.isEmpty()) {
-            salida.append("No se encontraron expresiones de asignación para generar código intermedio.");
+            salida.append("No se encontraron operaciones válidas (sin asignaciones simples ni strings) para generar código intermedio.");
             intermedioArea.setText(salida.toString());
             intermedioArea.setCaretPosition(0);
             return;
         }
 
         for (ExpresionIntermedia expresion : expresiones) {
+            salida.append("==============================================================================").append(System.lineSeparator());
             salida.append("Línea ")
                     .append(expresion.linea)
                     .append(" -> ")
@@ -669,20 +670,29 @@ public class Verti_AutomatasI {
                     .append(expresion.infijo)
                     .append(System.lineSeparator());
             salida.append("Infijo   : ").append(expresion.infijo).append(System.lineSeparator());
+            salida.append("Sustit.  : ").append(expresion.infijoSustituido).append(System.lineSeparator());
             salida.append("Prefijo  : ").append(expresion.prefijo).append(System.lineSeparator());
             salida.append("Postfijo : ").append(expresion.postfijo).append(System.lineSeparator());
+            salida.append("Resultado: ").append(expresion.resultadoOperacion).append(System.lineSeparator());
+            salida.append("==============================================================================").append(System.lineSeparator());
             salida.append("Cuádruplos:").append(System.lineSeparator());
             salida.append(String.format("%-4s | %-8s | %-12s | %-12s | %-12s%n",
                     "#", "Operador", "Arg1", "Arg2", "Resultado"));
 
+                Map<String, String> valoresTemporales = calcularValoresTemporales(expresion.cuadruplos);
+
             for (Cuadruplo cuadruplo : expresion.cuadruplos) {
+                String arg1Mostrado = formatearArgumentoConTemporal(cuadruplo.arg1, valoresTemporales);
+                String arg2Mostrado = formatearArgumentoConTemporal(cuadruplo.arg2, valoresTemporales);
                 salida.append(String.format("%-4d | %-8s | %-12s | %-12s | %-12s%n",
                         cuadruplo.indice,
                         cuadruplo.operador,
-                        cuadruplo.arg1,
-                        cuadruplo.arg2,
+                    arg1Mostrado,
+                    arg2Mostrado,
                         cuadruplo.resultado));
             }
+            salida.append("==============================================================================");
+            salida.append(System.lineSeparator());
             salida.append(System.lineSeparator());
         }
 
@@ -690,21 +700,107 @@ public class Verti_AutomatasI {
         intermedioArea.setCaretPosition(0);
     }
 
+    private static String formatearArgumentoConTemporal(String argumento, Map<String, String> valoresTemporales) {
+        if (argumento == null || argumento.isEmpty()) {
+            return argumento;
+        }
+
+        if (argumento.matches("t[0-9]+") && valoresTemporales.containsKey(argumento)) {
+            return argumento + "(" + valoresTemporales.get(argumento) + ")";
+        }
+
+        return argumento;
+    }
+
+    private static Map<String, String> calcularValoresTemporales(List<Cuadruplo> cuadruplos) {
+        Map<String, String> valoresTemporales = new HashMap<>();
+
+        for (Cuadruplo cuadruplo : cuadruplos) {
+            if (!cuadruplo.resultado.matches("t[0-9]+")) {
+                continue;
+            }
+
+            Double arg1 = resolverValorNumerico(cuadruplo.arg1, valoresTemporales);
+            Double arg2 = resolverValorNumerico(cuadruplo.arg2, valoresTemporales);
+            if (arg1 == null || arg2 == null) {
+                continue;
+            }
+
+            Double valor;
+            switch (cuadruplo.operador) {
+                case "+":
+                    valor = arg1 + arg2;
+                    break;
+                case "-":
+                    valor = arg1 - arg2;
+                    break;
+                case "*":
+                    valor = arg1 * arg2;
+                    break;
+                case "/":
+                    if (arg2 == 0.0d) {
+                        continue;
+                    }
+                    valor = arg1 / arg2;
+                    break;
+                case "%":
+                    if (arg2 == 0.0d) {
+                        continue;
+                    }
+                    valor = arg1 % arg2;
+                    break;
+                default:
+                    continue;
+            }
+
+            valoresTemporales.put(cuadruplo.resultado, formatearNumero(valor));
+        }
+
+        return valoresTemporales;
+    }
+
+    private static Double resolverValorNumerico(String argumento, Map<String, String> valoresTemporales) {
+        if (argumento == null || argumento.isEmpty()) {
+            return null;
+        }
+
+        if (PATRON_ENTERO.matcher(argumento).matches() || PATRON_FLOTANTE.matcher(argumento).matches()) {
+            return Double.parseDouble(argumento);
+        }
+
+        if (argumento.matches("t[0-9]+") && valoresTemporales.containsKey(argumento)) {
+            return Double.parseDouble(valoresTemporales.get(argumento));
+        }
+
+        return null;
+    }
+
+    private static String formatearNumero(double valor) {
+        if (Math.abs(valor - Math.rint(valor)) < 1e-9) {
+            return String.valueOf((long) Math.rint(valor));
+        }
+        return String.valueOf(valor);
+    }
+
     private static class ExpresionIntermedia {
         private final int linea;
         private final String destino;
         private final String infijo;
+        private final String infijoSustituido;
         private final String prefijo;
         private final String postfijo;
+        private final String resultadoOperacion;
         private final List<Cuadruplo> cuadruplos;
 
-        private ExpresionIntermedia(int linea, String destino, String infijo,
-                String prefijo, String postfijo, List<Cuadruplo> cuadruplos) {
+        private ExpresionIntermedia(int linea, String destino, String infijo, String infijoSustituido,
+                String prefijo, String postfijo, String resultadoOperacion, List<Cuadruplo> cuadruplos) {
             this.linea = linea;
             this.destino = destino;
             this.infijo = infijo;
+            this.infijoSustituido = infijoSustituido;
             this.prefijo = prefijo;
             this.postfijo = postfijo;
+            this.resultadoOperacion = resultadoOperacion;
             this.cuadruplos = cuadruplos;
         }
     }
@@ -727,9 +823,11 @@ public class Verti_AutomatasI {
 
     private static class GeneradorCodigoIntermedio {
         private final List<ParserToken> tokens;
+        private final Map<String, String> valoresConocidos;
 
         private GeneradorCodigoIntermedio(List<LexicoItem> itemsLexicos) {
             this.tokens = new ArrayList<>();
+            this.valoresConocidos = new HashMap<>();
             construirTokens(itemsLexicos);
         }
 
@@ -796,6 +894,7 @@ public class Verti_AutomatasI {
 
             List<String> expr = extraerExpresion(i, finExpr);
             ExpresionIntermedia intermedia = construirExpresion(linea, destino, expr);
+            actualizarValorConocido(destino, expr);
             if (intermedia != null) {
                 salida.add(intermedia);
             }
@@ -815,6 +914,7 @@ public class Verti_AutomatasI {
 
             List<String> expr = extraerExpresion(i, finExpr);
             ExpresionIntermedia intermedia = construirExpresion(linea, destino, expr);
+            actualizarValorConocido(destino, expr);
             if (intermedia != null) {
                 salida.add(intermedia);
             }
@@ -827,22 +927,148 @@ public class Verti_AutomatasI {
                 return null;
             }
 
-            List<String> postfijo = convertirInfijoAPostfijo(exprInfija);
+            if (!tieneOperador(exprInfija) || contieneStringLiteral(exprInfija)) {
+                return null;
+            }
+
+            List<String> exprSustituida = sustituirValores(exprInfija);
+            List<String> postfijo = convertirInfijoAPostfijo(exprSustituida);
             if (postfijo.isEmpty()) {
                 return null;
             }
 
             String prefijo = convertirPostfijoAPrefijo(postfijo);
             List<Cuadruplo> cuadruplos = construirCuadruplos(postfijo, destino);
+            String resultado = evaluarPostfijoNumerico(postfijo);
 
             return new ExpresionIntermedia(
                     linea,
                     destino,
                     String.join(" ", exprInfija),
+                    String.join(" ", exprSustituida),
                     prefijo,
                     String.join(" ", postfijo),
+                    resultado,
                     cuadruplos
             );
+        }
+
+        private void actualizarValorConocido(String destino, List<String> exprInfija) {
+            List<String> exprSustituida = sustituirValores(exprInfija);
+
+            if (exprSustituida.size() == 1) {
+                String unico = exprSustituida.get(0);
+                if (esLiteralCompatibleConSustitucion(unico)) {
+                    valoresConocidos.put(destino, unico);
+                    return;
+                }
+            }
+
+            if (tieneOperador(exprSustituida) && !contieneStringLiteral(exprSustituida)) {
+                List<String> postfijo = convertirInfijoAPostfijo(exprSustituida);
+                String resultado = evaluarPostfijoNumerico(postfijo);
+                if (!"No evaluable".equals(resultado)) {
+                    valoresConocidos.put(destino, resultado);
+                    return;
+                }
+            }
+
+            valoresConocidos.remove(destino);
+        }
+
+        private List<String> sustituirValores(List<String> exprInfija) {
+            List<String> sustituida = new ArrayList<>();
+            for (String token : exprInfija) {
+                if (PATRON_IDENTIFICADOR.matcher(token).matches() && valoresConocidos.containsKey(token)) {
+                    sustituida.add(valoresConocidos.get(token));
+                } else {
+                    sustituida.add(token);
+                }
+            }
+            return sustituida;
+        }
+
+        private boolean tieneOperador(List<String> expresion) {
+            for (String token : expresion) {
+                if (esOperador(token)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean contieneStringLiteral(List<String> expresion) {
+            for (String token : expresion) {
+                if (token.startsWith("\"") && token.endsWith("\"") && token.length() >= 2) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean esLiteralCompatibleConSustitucion(String token) {
+            return PATRON_ENTERO.matcher(token).matches()
+                    || PATRON_FLOTANTE.matcher(token).matches()
+                    || "true".equals(token)
+                    || "false".equals(token)
+                    || (token.startsWith("\"") && token.endsWith("\"") && token.length() >= 2);
+        }
+
+        private String evaluarPostfijoNumerico(List<String> postfijo) {
+            Deque<Double> pila = new ArrayDeque<>();
+
+            for (String token : postfijo) {
+                if (PATRON_ENTERO.matcher(token).matches() || PATRON_FLOTANTE.matcher(token).matches()) {
+                    pila.push(Double.parseDouble(token));
+                    continue;
+                }
+
+                if (esOperador(token)) {
+                    if (pila.size() < 2) {
+                        return "No evaluable";
+                    }
+                    double der = pila.pop();
+                    double izq = pila.pop();
+                    switch (token) {
+                        case "+":
+                            pila.push(izq + der);
+                            break;
+                        case "-":
+                            pila.push(izq - der);
+                            break;
+                        case "*":
+                            pila.push(izq * der);
+                            break;
+                        case "/":
+                            if (der == 0.0d) {
+                                return "No evaluable";
+                            }
+                            pila.push(izq / der);
+                            break;
+                        case "%":
+                            if (der == 0.0d) {
+                                return "No evaluable";
+                            }
+                            pila.push(izq % der);
+                            break;
+                        default:
+                            return "No evaluable";
+                    }
+                    continue;
+                }
+
+                return "No evaluable";
+            }
+
+            if (pila.size() != 1) {
+                return "No evaluable";
+            }
+
+            double valor = pila.pop();
+            if (Math.abs(valor - Math.rint(valor)) < 1e-9) {
+                return String.valueOf((long) Math.rint(valor));
+            }
+            return String.valueOf(valor);
         }
 
         private List<String> extraerExpresion(int inicio, int finExclusivo) {
