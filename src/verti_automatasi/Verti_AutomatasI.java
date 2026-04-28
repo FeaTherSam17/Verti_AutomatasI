@@ -140,6 +140,10 @@ public class Verti_AutomatasI {
         intermedioArea.setEditable(false);
         intermedioArea.setFont(new Font("Monospaced", Font.PLAIN, 16));
 
+        JTextArea optimizadoArea = new JTextArea(12, 60);
+        optimizadoArea.setEditable(false);
+        optimizadoArea.setFont(new Font("Monospaced", Font.PLAIN, 16));
+
         // Secciones de análisis.
         JTabbedPane analisisTabs = new JTabbedPane();
         JScrollPane lexicoScroll = new JScrollPane(lexicoTable);
@@ -154,6 +158,7 @@ public class Verti_AutomatasI {
         analisisTabs.addTab("Análisis sintáctico", new JScrollPane(sintacticoArea));
         analisisTabs.addTab("Análisis semántico", new JScrollPane(semanticoArea));
         analisisTabs.addTab("Código intermedio", new JScrollPane(intermedioArea));
+        analisisTabs.addTab("Código optimizado", new JScrollPane(optimizadoArea));
 
         JButton abrirBtn = new JButton("Abrir archivo");
         JButton analizarBtn = new JButton("Analizar");
@@ -202,6 +207,7 @@ public class Verti_AutomatasI {
             analizarSintacticoYMostrarTexto(items, sintacticoArea);
             analizarSemanticoYMostrarTexto(items, semanticoArea);
             analizarIntermedioYMostrarTexto(items, intermedioArea);
+            analizarOptimizacionYMostrarTexto(items, optimizadoArea);
             analisisTabs.setSelectedIndex(0);
         });
 
@@ -212,6 +218,7 @@ public class Verti_AutomatasI {
             sintacticoArea.setText("");
             semanticoArea.setText("");
             intermedioArea.setText("");
+            optimizadoArea.setText("");
             currentFile.set(null);
             rutaLabel.setText("Archivo: (sin seleccionar)");
         });
@@ -383,6 +390,17 @@ public class Verti_AutomatasI {
     private static void analizarIntermedioYMostrarTexto(List<LexicoItem> itemsLexicos, JTextArea intermedioArea) {
         List<ExpresionIntermedia> expresiones = analizarCodigoIntermedio(itemsLexicos);
         cargarTextoIntermedio(intermedioArea, expresiones);
+    }
+
+    private static void analizarOptimizacionYMostrarTexto(List<LexicoItem> itemsLexicos, JTextArea optimizadoArea) {
+        List<ExpresionIntermedia> expresiones = analizarCodigoIntermedio(itemsLexicos);
+        List<ExpresionIntermedia> expresionesOptimizadas = optimizarCodigoIntermedio(expresiones);
+        cargarTextoOptimizado(optimizadoArea, expresionesOptimizadas);
+    }
+
+    private static List<ExpresionIntermedia> optimizarCodigoIntermedio(List<ExpresionIntermedia> expresiones) {
+        OptimizadorCodigoIntermedio optimizador = new OptimizadorCodigoIntermedio(expresiones);
+        return optimizador.optimizar();
     }
 
     private static List<ExpresionIntermedia> analizarCodigoIntermedio(List<LexicoItem> itemsLexicos) {
@@ -780,6 +798,53 @@ public class Verti_AutomatasI {
             return String.valueOf((long) Math.rint(valor));
         }
         return String.valueOf(valor);
+    }
+
+    private static void cargarTextoOptimizado(JTextArea optimizadoArea, List<ExpresionIntermedia> expresionesOptimizadas) {
+        StringBuilder salida = new StringBuilder();
+
+        if (expresionesOptimizadas.isEmpty()) {
+            salida.append("No se encontraron operaciones válidas para optimizar.");
+            optimizadoArea.setText(salida.toString());
+            optimizadoArea.setCaretPosition(0);
+            return;
+        }
+
+        salida.append("═══════════════════════════════════════════════════════════════════════════════").append(System.lineSeparator());
+        salida.append("OPTIMIZACIÓN DE CÓDIGO INTERMEDIO - PROPAGACIÓN DE CONSTANTES").append(System.lineSeparator());
+        salida.append("═══════════════════════════════════════════════════════════════════════════════").append(System.lineSeparator());
+        salida.append(System.lineSeparator());
+
+        for (ExpresionIntermedia expresion : expresionesOptimizadas) {
+            salida.append("──────────────────────────────────────────────────────────────────────────────").append(System.lineSeparator());
+            salida.append("Línea ").append(expresion.linea).append(" -> ").append(expresion.destino).append(" = ").append(expresion.infijo).append(System.lineSeparator());
+            salida.append("──────────────────────────────────────────────────────────────────────────────").append(System.lineSeparator());
+            salida.append("Infijo Original  : ").append(expresion.infijo).append(System.lineSeparator());
+            salida.append("Infijo Optimizado: ").append(expresion.infijoSustituido).append(System.lineSeparator());
+            salida.append("Postfijo Optimizado: ").append(expresion.postfijo).append(System.lineSeparator());
+            salida.append("Resultado: ").append(expresion.resultadoOperacion).append(System.lineSeparator());
+            salida.append(System.lineSeparator());
+            salida.append("Cuádruplos Optimizados:").append(System.lineSeparator());
+            salida.append(String.format("%-4s | %-8s | %-12s | %-12s | %-12s%n",
+                    "#", "Operador", "Arg1", "Arg2", "Resultado"));
+
+            Map<String, String> valoresTemporales = calcularValoresTemporales(expresion.cuadruplos);
+
+            for (Cuadruplo cuadruplo : expresion.cuadruplos) {
+                String arg1Mostrado = formatearArgumentoConTemporal(cuadruplo.arg1, valoresTemporales);
+                String arg2Mostrado = formatearArgumentoConTemporal(cuadruplo.arg2, valoresTemporales);
+                salida.append(String.format("%-4d | %-8s | %-12s | %-12s | %-12s%n",
+                        cuadruplo.indice,
+                        cuadruplo.operador,
+                        arg1Mostrado,
+                        arg2Mostrado,
+                        cuadruplo.resultado));
+            }
+            salida.append(System.lineSeparator());
+        }
+
+        optimizadoArea.setText(salida.toString());
+        optimizadoArea.setCaretPosition(0);
     }
 
     private static class ExpresionIntermedia {
@@ -1417,6 +1482,226 @@ public class Verti_AutomatasI {
                 }
             }
             return null;
+        }
+    }
+
+    private static class OptimizadorCodigoIntermedio {
+        private final List<ExpresionIntermedia> expresiones;
+        private final Map<String, String> constantesPropagas;
+
+        private OptimizadorCodigoIntermedio(List<ExpresionIntermedia> expresiones) {
+            this.expresiones = expresiones;
+            this.constantesPropagas = new HashMap<>();
+        }
+
+        private List<ExpresionIntermedia> optimizar() {
+            List<ExpresionIntermedia> resultado = new ArrayList<>();
+
+            // Primera pasada: identificar constantes
+            identificarConstantes();
+
+            // Segunda pasada: propagar constantes
+            for (ExpresionIntermedia expr : expresiones) {
+                ExpresionIntermedia exprOptimizada = propagarConstantes(expr);
+                resultado.add(exprOptimizada);
+            }
+
+            return resultado;
+        }
+
+        private void identificarConstantes() {
+            for (ExpresionIntermedia expr : expresiones) {
+                // Si el resultado es un número constante, lo registramos
+                if (esConstante(expr.resultadoOperacion)) {
+                    constantesPropagas.put(expr.destino, expr.resultadoOperacion);
+                }
+            }
+        }
+
+        private ExpresionIntermedia propagarConstantes(ExpresionIntermedia expr) {
+            // Sustituir variables por sus valores constantes en la expresión infija
+            String infijoOptimizado = sustituirConstantesEnExpresion(expr.infijo);
+            
+            // Calcular nuevos cuádruplos optimizados
+            List<Cuadruplo> cuadruploOptimizado = optimizarCuadruplos(expr.cuadruplos);
+            
+            // Recalcular el resultado si es necesario
+            List<String> postfijoList = new ArrayList<>(Arrays.asList(expr.postfijo.split("\\s+")));
+            String resultadoOptimizado = evaluarPostfijoNumerico(postfijoList);
+
+            return new ExpresionIntermedia(
+                    expr.linea,
+                    expr.destino,
+                    infijoOptimizado,
+                    infijoOptimizado,
+                    expr.prefijo,
+                    expr.postfijo,
+                    resultadoOptimizado,
+                    cuadruploOptimizado
+            );
+        }
+
+        private String sustituirConstantesEnExpresion(String infijo) {
+            String resultado = infijo;
+            
+            // Iterar sobre todas las constantes propagadas
+            for (Map.Entry<String, String> entrada : constantesPropagas.entrySet()) {
+                String variable = entrada.getKey();
+                String valor = entrada.getValue();
+                
+                // Reemplazar la variable con su valor constante (usar límites de palabra)
+                resultado = resultado.replaceAll("\\b" + variable + "\\b", valor);
+            }
+            
+            return resultado;
+        }
+
+        private List<Cuadruplo> optimizarCuadruplos(List<Cuadruplo> cuadruplos) {
+            List<Cuadruplo> resultado = new ArrayList<>();
+            Map<String, String> temporalesConocidos = new HashMap<>();
+            
+            for (Cuadruplo quad : cuadruplos) {
+                // Sustituir argumentos por constantes si aplica
+                String arg1Opt = resolverArgumentoOptimizado(quad.arg1, temporalesConocidos);
+                String arg2Opt = resolverArgumentoOptimizado(quad.arg2, temporalesConocidos);
+
+                if ("=".equals(quad.operador)) {
+                    Cuadruplo cuadOpt = new Cuadruplo(quad.indice, quad.operador, arg1Opt, arg2Opt, quad.resultado);
+                    resultado.add(cuadOpt);
+
+                    if (esConstanteNumerica(arg1Opt)) {
+                        temporalesConocidos.put(quad.resultado, arg1Opt);
+                    }
+                    continue;
+                }
+                
+                // Si ambos argumentos son constantes, hacer evaluación en tiempo de compilación
+                if (sonConstantesNumericas(arg1Opt, arg2Opt)) {
+                    Double resultado1 = resolverConstante(arg1Opt);
+                    Double resultado2 = resolverConstante(arg2Opt);
+                    
+                    if (resultado1 != null && resultado2 != null) {
+                        Double resultadoEval = evaluarOperacion(resultado1, resultado2, quad.operador);
+                        if (resultadoEval != null) {
+                            // Crear un nuevo cuádruplo con resultado evaluado
+                            String valorConst = formatearNumero(resultadoEval);
+                            if (quad.resultado != null && quad.resultado.matches("t[0-9]+")) {
+                                temporalesConocidos.put(quad.resultado, valorConst);
+                            }
+                            Cuadruplo cuadOpt = new Cuadruplo(quad.indice, quad.operador, arg1Opt, arg2Opt, valorConst);
+                            resultado.add(cuadOpt);
+                            continue;
+                        }
+                    }
+                }
+                
+                // Si no se puede optimizar, mantener el cuádruplo con constantes propagadas
+                if (quad.resultado != null && quad.resultado.matches("t[0-9]+") && esConstanteNumerica(arg1Opt)) {
+                    temporalesConocidos.put(quad.resultado, arg1Opt);
+                }
+                Cuadruplo cuadOpt = new Cuadruplo(quad.indice, quad.operador, arg1Opt, arg2Opt, quad.resultado);
+                resultado.add(cuadOpt);
+            }
+            
+            return resultado;
+        }
+
+        private String resolverArgumentoOptimizado(String argumento, Map<String, String> temporalesConocidos) {
+            if (argumento == null) {
+                return null;
+            }
+
+            if (temporalesConocidos.containsKey(argumento)) {
+                return temporalesConocidos.get(argumento);
+            }
+
+            if (constantesPropagas.containsKey(argumento)) {
+                return constantesPropagas.get(argumento);
+            }
+
+            return argumento;
+        }
+
+        private boolean esConstanteNumerica(String valor) {
+            return valor != null && (PATRON_ENTERO.matcher(valor).matches() || PATRON_FLOTANTE.matcher(valor).matches());
+        }
+
+        private boolean sonConstantesNumericas(String arg1, String arg2) {
+            return esConstanteNumerica(arg1) && esConstanteNumerica(arg2);
+        }
+
+        private Double resolverConstante(String valor) {
+            if (PATRON_ENTERO.matcher(valor).matches() || PATRON_FLOTANTE.matcher(valor).matches()) {
+                try {
+                    return Double.parseDouble(valor);
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        private Double evaluarOperacion(Double izq, Double der, String operador) {
+            switch (operador) {
+                case "+":
+                    return izq + der;
+                case "-":
+                    return izq - der;
+                case "*":
+                    return izq * der;
+                case "/":
+                    return der != 0.0 ? izq / der : null;
+                case "%":
+                    return der != 0.0 ? izq % der : null;
+                default:
+                    return null;
+            }
+        }
+
+        private boolean esConstante(String valor) {
+            if (valor == null) return false;
+            try {
+                Double.parseDouble(valor);
+                return true;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+
+        private String evaluarPostfijoNumerico(List<String> postfijo) {
+            Deque<Double> pila = new ArrayDeque<>();
+
+            for (String token : postfijo) {
+                if (PATRON_ENTERO.matcher(token).matches() || PATRON_FLOTANTE.matcher(token).matches()) {
+                    pila.push(Double.parseDouble(token));
+                    continue;
+                }
+
+                if (esOperadorOptimizador(token)) {
+                    if (pila.size() < 2) {
+                        return "No evaluable";
+                    }
+                    double der = pila.pop();
+                    double izq = pila.pop();
+                    Double resultado = evaluarOperacion(izq, der, token);
+                    if (resultado != null) {
+                        pila.push(resultado);
+                    } else {
+                        return "No evaluable";
+                    }
+                }
+            }
+
+            if (pila.isEmpty()) {
+                return "No evaluable";
+            }
+
+            return formatearNumero(pila.pop());
+        }
+
+        private boolean esOperadorOptimizador(String token) {
+            return "+".equals(token) || "-".equals(token) || "*".equals(token) || 
+                   "/".equals(token) || "%".equals(token);
         }
     }
 
