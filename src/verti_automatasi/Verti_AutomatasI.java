@@ -106,6 +106,8 @@ public class Verti_AutomatasI {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         // Referencia al archivo actualmente abierto (null si no hay archivo asociado)
         AtomicReference<File> currentFile = new AtomicReference<>(null);
+        AtomicReference<Long> lastAnalisisOriginalMs = new AtomicReference<>(null);
+        AtomicReference<Long> lastAnalisisOptimizadoMs = new AtomicReference<>(null);
 
         // Área de código con numeración de líneas.
         JTextArea entradaArea = new JTextArea(24, 100);
@@ -211,12 +213,17 @@ public class Verti_AutomatasI {
                         JOptionPane.WARNING_MESSAGE);
                 return;
             }
+            long inicioOriginal = System.nanoTime();
             List<LexicoItem> items = analizarLexicoYMostrarTabla(texto, lexicoModel);
             analizarSintacticoYMostrarTexto(items, sintacticoArea);
             analizarSemanticoYMostrarTexto(items, semanticoArea);
             analizarIntermedioYMostrarTexto(items, intermedioArea);
             analizarOptimizacionYMostrarTexto(items, intermedioOptimizadoArea);
-            analizarCodigoFuenteOptimizadoYMostrarTexto(texto, items, codigoOptimizadoArea);
+            String codigoOptimizado = analizarCodigoFuenteOptimizadoYMostrarTexto(texto, items, codigoOptimizadoArea);
+            long duracionOriginalMs = (System.nanoTime() - inicioOriginal) / 1_000_000L;
+            long duracionOptimizadoMs = medirAnalisisCompleto(codigoOptimizado);
+            lastAnalisisOriginalMs.set(duracionOriginalMs);
+            lastAnalisisOptimizadoMs.set(duracionOptimizadoMs);
             analisisTabs.setSelectedIndex(0);
         });
 
@@ -256,8 +263,47 @@ public class Verti_AutomatasI {
                 File destino = saver.getSelectedFile();
                 try {
                     Files.writeString(destino.toPath(), contenido, StandardCharsets.UTF_8);
+
+                    StringBuilder mensaje = new StringBuilder();
+                    mensaje.append("Archivo guardado: ").append(destino.getName());
+
+                    File archivoOriginal = currentFile.get();
+                    if (archivoOriginal != null && archivoOriginal.exists()) {
+                        long tamOriginal = Files.size(archivoOriginal.toPath());
+                        long tamOptimizado = Files.size(destino.toPath());
+                        mensaje.append(System.lineSeparator())
+                                .append("Tamano original: ")
+                                .append(formatearBytes(tamOriginal))
+                                .append(" | Tamano optimizado: ")
+                                .append(formatearBytes(tamOptimizado))
+                                .append(" | Reduccion: ")
+                                .append(formatearPorcentajeReduccion(tamOriginal, tamOptimizado));
+                    } else {
+                        mensaje.append(System.lineSeparator())
+                                .append("Tamano original: sin archivo original en disco");
+                    }
+
+                    Long ultimoOriginalMs = lastAnalisisOriginalMs.get();
+                    Long ultimoOptimizadoMs = lastAnalisisOptimizadoMs.get();
+                    mensaje.append(System.lineSeparator());
+                    if (ultimoOriginalMs != null) {
+                        mensaje.append("Tiempo original: ")
+                                .append(ultimoOriginalMs)
+                                .append(" ms");
+                    } else {
+                        mensaje.append("Tiempo original: no disponible");
+                    }
+                    mensaje.append(System.lineSeparator());
+                    if (ultimoOptimizadoMs != null) {
+                        mensaje.append("Tiempo optimizado: ")
+                                .append(ultimoOptimizadoMs)
+                                .append(" ms");
+                    } else {
+                        mensaje.append("Tiempo optimizado: no disponible");
+                    }
+
                     JOptionPane.showMessageDialog(frame,
-                            "Archivo guardado: " + destino.getName(),
+                            mensaje.toString(),
                             "Guardado",
                             JOptionPane.INFORMATION_MESSAGE);
                 } catch (IOException ex) {
@@ -445,10 +491,22 @@ public class Verti_AutomatasI {
         cargarTextoOptimizado(optimizadoArea, expresionesOptimizadas);
     }
 
-    private static void analizarCodigoFuenteOptimizadoYMostrarTexto(String texto, List<LexicoItem> itemsLexicos, JTextArea codigoOptimizadoArea) {
+    private static String analizarCodigoFuenteOptimizadoYMostrarTexto(String texto, List<LexicoItem> itemsLexicos, JTextArea codigoOptimizadoArea) {
         String optimizado = optimizarCodigoFuente(texto, itemsLexicos);
         codigoOptimizadoArea.setText(optimizado);
         codigoOptimizadoArea.setCaretPosition(0);
+        return optimizado;
+    }
+
+    private static long medirAnalisisCompleto(String texto) {
+        long inicio = System.nanoTime();
+        List<LexicoItem> items = analizarLexico(texto);
+        analizarSintactico(items);
+        analizarSemantico(items);
+        List<ExpresionIntermedia> expresiones = analizarCodigoIntermedio(items);
+        optimizarCodigoIntermedio(expresiones);
+        optimizarCodigoFuente(texto, items);
+        return (System.nanoTime() - inicio) / 1_000_000L;
     }
 
     private static String optimizarCodigoFuente(String texto, List<LexicoItem> itemsLexicos) {
@@ -887,6 +945,26 @@ public class Verti_AutomatasI {
             salida.append(System.lineSeparator());
         }
         salida.append(limpia);
+    }
+
+    private static String formatearBytes(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+        double kb = bytes / 1024.0;
+        if (kb < 1024) {
+            return String.format("%.2f KB", kb);
+        }
+        double mb = kb / 1024.0;
+        return String.format("%.2f MB", mb);
+    }
+
+    private static String formatearPorcentajeReduccion(long original, long optimizado) {
+        if (original <= 0) {
+            return "0%";
+        }
+        double reduccion = 100.0 * (1.0 - (optimizado / (double) original));
+        return String.format("%.2f%%", reduccion);
     }
 
     private static List<ExpresionIntermedia> optimizarCodigoIntermedio(List<ExpresionIntermedia> expresiones) {
