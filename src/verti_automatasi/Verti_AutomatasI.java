@@ -140,9 +140,14 @@ public class Verti_AutomatasI {
         intermedioArea.setEditable(false);
         intermedioArea.setFont(new Font("Monospaced", Font.PLAIN, 16));
 
-        JTextArea optimizadoArea = new JTextArea(12, 60);
-        optimizadoArea.setEditable(false);
-        optimizadoArea.setFont(new Font("Monospaced", Font.PLAIN, 16));
+        JTextArea intermedioOptimizadoArea = new JTextArea(12, 60);
+        intermedioOptimizadoArea.setEditable(false);
+        intermedioOptimizadoArea.setFont(new Font("Monospaced", Font.PLAIN, 16));
+
+        JTextArea codigoOptimizadoArea = new JTextArea(24, 100);
+        codigoOptimizadoArea.setEditable(false);
+        codigoOptimizadoArea.setFont(new Font("Monospaced", Font.PLAIN, 18));
+        JScrollPane codigoOptimizadoScroll = crearEditorConNumerosDeLinea(codigoOptimizadoArea);
 
         // Secciones de análisis.
         JTabbedPane analisisTabs = new JTabbedPane();
@@ -158,11 +163,13 @@ public class Verti_AutomatasI {
         analisisTabs.addTab("Análisis sintáctico", new JScrollPane(sintacticoArea));
         analisisTabs.addTab("Análisis semántico", new JScrollPane(semanticoArea));
         analisisTabs.addTab("Código intermedio", new JScrollPane(intermedioArea));
-        analisisTabs.addTab("Código optimizado", new JScrollPane(optimizadoArea));
+        analisisTabs.addTab("Intermedio optimizado", new JScrollPane(intermedioOptimizadoArea));
+        analisisTabs.addTab("Código optimizado", codigoOptimizadoScroll);
 
         JButton abrirBtn = new JButton("Abrir archivo");
         JButton analizarBtn = new JButton("Analizar");
         JButton limpiarBtn = new JButton("Limpiar");
+        JButton exportarBtn = new JButton("Exportar optimizado");
 
         JLabel rutaLabel = new JLabel("Archivo: (sin seleccionar)");
 
@@ -172,6 +179,7 @@ public class Verti_AutomatasI {
         analizarBtn.setFont(controlFont);
         limpiarBtn.setFont(controlFont);
         rutaLabel.setFont(new Font("SansSerif", Font.PLAIN, 15));
+        exportarBtn.setFont(controlFont);
 
         abrirBtn.addActionListener(e -> {
             // Carga texto desde archivo al editor.
@@ -207,7 +215,8 @@ public class Verti_AutomatasI {
             analizarSintacticoYMostrarTexto(items, sintacticoArea);
             analizarSemanticoYMostrarTexto(items, semanticoArea);
             analizarIntermedioYMostrarTexto(items, intermedioArea);
-            analizarOptimizacionYMostrarTexto(items, optimizadoArea);
+            analizarOptimizacionYMostrarTexto(items, intermedioOptimizadoArea);
+            analizarCodigoFuenteOptimizadoYMostrarTexto(texto, items, codigoOptimizadoArea);
             analisisTabs.setSelectedIndex(0);
         });
 
@@ -218,9 +227,46 @@ public class Verti_AutomatasI {
             sintacticoArea.setText("");
             semanticoArea.setText("");
             intermedioArea.setText("");
-            optimizadoArea.setText("");
+            intermedioOptimizadoArea.setText("");
+            codigoOptimizadoArea.setText("");
             currentFile.set(null);
             rutaLabel.setText("Archivo: (sin seleccionar)");
+        });
+
+        exportarBtn.addActionListener(ev -> {
+            String contenido = codigoOptimizadoArea.getText();
+            if (contenido == null || contenido.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(frame,
+                        "No hay código optimizado para exportar.",
+                        "Aviso",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            JFileChooser saver = new JFileChooser();
+            File archivoActual = currentFile.get();
+            if (archivoActual != null && archivoActual.getParentFile() != null) {
+                saver.setSelectedFile(new File(archivoActual.getParentFile(), "codigo_optimizado.rs"));
+            } else {
+                saver.setSelectedFile(new File("codigo_optimizado.rs"));
+            }
+
+            int r = saver.showSaveDialog(frame);
+            if (r == JFileChooser.APPROVE_OPTION) {
+                File destino = saver.getSelectedFile();
+                try {
+                    Files.writeString(destino.toPath(), contenido, StandardCharsets.UTF_8);
+                    JOptionPane.showMessageDialog(frame,
+                            "Archivo guardado: " + destino.getName(),
+                            "Guardado",
+                            JOptionPane.INFORMATION_MESSAGE);
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(frame,
+                            "No se pudo guardar el archivo.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
         });
 
         // Barra de menú: File -> Save, Save as..., Exit
@@ -296,6 +342,7 @@ public class Verti_AutomatasI {
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         topPanel.add(analizarBtn);
         topPanel.add(limpiarBtn);
+        topPanel.add(exportarBtn);
 
         JPanel rutaPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         rutaPanel.add(rutaLabel);
@@ -396,6 +443,450 @@ public class Verti_AutomatasI {
         List<ExpresionIntermedia> expresiones = analizarCodigoIntermedio(itemsLexicos);
         List<ExpresionIntermedia> expresionesOptimizadas = optimizarCodigoIntermedio(expresiones);
         cargarTextoOptimizado(optimizadoArea, expresionesOptimizadas);
+    }
+
+    private static void analizarCodigoFuenteOptimizadoYMostrarTexto(String texto, List<LexicoItem> itemsLexicos, JTextArea codigoOptimizadoArea) {
+        String optimizado = optimizarCodigoFuente(texto, itemsLexicos);
+        codigoOptimizadoArea.setText(optimizado);
+        codigoOptimizadoArea.setCaretPosition(0);
+    }
+
+    private static String optimizarCodigoFuente(String texto, List<LexicoItem> itemsLexicos) {
+        List<LexicoItem> tokens = new ArrayList<>();
+        for (LexicoItem item : itemsLexicos) {
+            if ("comentario_linea".equals(item.token) || "comentario_bloque".equals(item.token)
+                    || "error".equals(item.token)) {
+                continue;
+            }
+            tokens.add(item);
+        }
+
+        List<StatementInfo> declaraciones = construirStatementsOptimizado(tokens);
+        Set<String> usados = new HashSet<>();
+        List<String> salida = new ArrayList<>();
+
+        for (int i = declaraciones.size() - 1; i >= 0; i--) {
+            StatementInfo stmt = declaraciones.get(i);
+            if (stmt.esAsignacion && stmt.constante && !usados.contains(stmt.destino)) {
+                continue;
+            }
+
+            if (stmt.texto != null && !stmt.texto.isEmpty()) {
+                salida.add(0, stmt.texto);
+            }
+
+            if (stmt.esAsignacion && stmt.destino != null) {
+                usados.remove(stmt.destino);
+            }
+
+            usados.addAll(stmt.usados);
+        }
+
+        return String.join(System.lineSeparator(), salida);
+    }
+
+    private static List<StatementInfo> construirStatementsOptimizado(List<LexicoItem> tokens) {
+        List<StatementInfo> salida = new ArrayList<>();
+        Map<String, String> constantes = new HashMap<>();
+        int i = 0;
+
+        while (i < tokens.size()) {
+            LexicoItem actual = tokens.get(i);
+
+            if ("palabra reservada".equals(actual.token) && "let".equals(actual.lexema)) {
+                i = procesarDeclaracionOptimizada(tokens, i, constantes, salida);
+                continue;
+            }
+
+            if ("palabra reservada".equals(actual.token) && "return".equals(actual.lexema)) {
+                i = procesarReturnOptimizada(tokens, i, constantes, salida);
+                continue;
+            }
+
+            if ("identificador".equals(actual.token)
+                    && i + 1 < tokens.size()
+                    && "=".equals(tokens.get(i + 1).lexema)) {
+                i = procesarAsignacionOptimizada(tokens, i, constantes, salida);
+                continue;
+            }
+
+            i = procesarSentenciaGenerica(tokens, i, constantes, salida);
+        }
+
+        return salida;
+    }
+
+    private static int procesarReturnOptimizada(List<LexicoItem> tokens, int indice,
+            Map<String, String> constantes, List<StatementInfo> salida) {
+        StringBuilder linea = new StringBuilder();
+        Set<String> usados = new HashSet<>();
+        List<String> exprTokens = new ArrayList<>();
+
+        escribirToken(linea, tokens.get(indice));
+        indice++;
+
+        while (indice < tokens.size()) {
+            LexicoItem actual = tokens.get(indice);
+            if (";".equals(actual.lexema)) {
+                break;
+            }
+
+            agregarTokenConSustitucion(linea, actual, constantes, usados, exprTokens);
+            indice++;
+        }
+
+        String constante = evaluarConstante(exprTokens);
+        if (constante != null) {
+            linea.setLength(0);
+            escribirTokenLexema(linea, "return", "palabra reservada");
+            escribirTokenLexema(linea, constante, "numero");
+            usados.clear();
+        }
+
+        if (indice < tokens.size() && ";".equals(tokens.get(indice).lexema)) {
+            escribirToken(linea, tokens.get(indice));
+            indice++;
+        }
+
+        String texto = construirLinea(linea);
+        if (!texto.isEmpty()) {
+            salida.add(new StatementInfo(texto, null, false, false, usados));
+        }
+
+        return indice;
+    }
+
+    private static int procesarDeclaracionOptimizada(List<LexicoItem> tokens, int indice,
+            Map<String, String> constantes, List<StatementInfo> salida) {
+        StringBuilder linea = new StringBuilder();
+        Set<String> usados = new HashSet<>();
+        List<String> exprTokens = new ArrayList<>();
+        boolean enExpr = false;
+        String destino = null;
+
+        escribirToken(linea, tokens.get(indice));
+        indice++;
+
+        if (indice < tokens.size() && "mut".equals(tokens.get(indice).lexema)) {
+            escribirToken(linea, tokens.get(indice));
+            indice++;
+        }
+
+        if (indice < tokens.size() && "identificador".equals(tokens.get(indice).token)) {
+            destino = tokens.get(indice).lexema;
+            escribirToken(linea, tokens.get(indice));
+            indice++;
+        }
+
+        while (indice < tokens.size()) {
+            LexicoItem actual = tokens.get(indice);
+            if (";".equals(actual.lexema)) {
+                escribirToken(linea, actual);
+                break;
+            }
+
+            if ("=".equals(actual.lexema)) {
+                escribirToken(linea, actual);
+                enExpr = true;
+                indice++;
+                continue;
+            }
+
+            if (enExpr) {
+                agregarTokenConSustitucion(linea, actual, constantes, usados, exprTokens);
+            } else {
+                escribirToken(linea, actual);
+            }
+            indice++;
+        }
+
+        boolean constante = actualizarConstante(destino, exprTokens, constantes);
+        String texto = construirLinea(linea);
+        if (!texto.isEmpty()) {
+            salida.add(new StatementInfo(texto, destino, true, constante, usados));
+        }
+
+        return indice < tokens.size() ? indice + 1 : indice;
+    }
+
+    private static int procesarAsignacionOptimizada(List<LexicoItem> tokens, int indice,
+            Map<String, String> constantes, List<StatementInfo> salida) {
+        StringBuilder linea = new StringBuilder();
+        Set<String> usados = new HashSet<>();
+        List<String> exprTokens = new ArrayList<>();
+        String destino = null;
+        boolean enExpr = false;
+
+        if ("identificador".equals(tokens.get(indice).token)) {
+            destino = tokens.get(indice).lexema;
+            escribirToken(linea, tokens.get(indice));
+            indice++;
+        }
+
+        if (indice < tokens.size() && "=".equals(tokens.get(indice).lexema)) {
+            escribirToken(linea, tokens.get(indice));
+            enExpr = true;
+            indice++;
+        }
+
+        while (indice < tokens.size()) {
+            LexicoItem actual = tokens.get(indice);
+            if (";".equals(actual.lexema)) {
+                escribirToken(linea, actual);
+                break;
+            }
+
+            if (enExpr) {
+                agregarTokenConSustitucion(linea, actual, constantes, usados, exprTokens);
+            } else {
+                escribirToken(linea, actual);
+            }
+            indice++;
+        }
+
+        boolean constante = actualizarConstante(destino, exprTokens, constantes);
+        String texto = construirLinea(linea);
+        if (!texto.isEmpty()) {
+            salida.add(new StatementInfo(texto, destino, true, constante, usados));
+        }
+
+        return indice < tokens.size() ? indice + 1 : indice;
+    }
+
+    private static int procesarSentenciaGenerica(List<LexicoItem> tokens, int indice,
+            Map<String, String> constantes, List<StatementInfo> salida) {
+        StringBuilder linea = new StringBuilder();
+        Set<String> usados = new HashSet<>();
+
+        while (indice < tokens.size()) {
+            LexicoItem actual = tokens.get(indice);
+            if (";".equals(actual.lexema) || "{".equals(actual.lexema) || "}".equals(actual.lexema)) {
+                escribirToken(linea, actual);
+                indice++;
+                break;
+            }
+
+            agregarTokenConSustitucion(linea, actual, constantes, usados, null);
+            indice++;
+        }
+
+        String texto = construirLinea(linea);
+        if (!texto.isEmpty()) {
+            salida.add(new StatementInfo(texto, null, false, false, usados));
+        }
+
+        return indice;
+    }
+
+    private static void agregarTokenConSustitucion(StringBuilder linea, LexicoItem token,
+            Map<String, String> constantes, Set<String> usados, List<String> exprTokens) {
+        if (token == null) {
+            return;
+        }
+
+        if ("identificador".equals(token.token) && constantes.containsKey(token.lexema)) {
+            String valor = constantes.get(token.lexema);
+            escribirTokenLexema(linea, valor, "numero");
+            if (exprTokens != null) {
+                exprTokens.add(valor);
+            }
+            return;
+        }
+
+        if ("identificador".equals(token.token)) {
+            usados.add(token.lexema);
+        }
+
+        escribirToken(linea, token);
+        if (exprTokens != null) {
+            exprTokens.add(token.lexema);
+        }
+    }
+
+    private static boolean actualizarConstante(String destino, List<String> exprTokens,
+            Map<String, String> constantes) {
+        if (destino == null) {
+            return false;
+        }
+
+        String constante = evaluarConstante(exprTokens);
+        if (constante != null) {
+            constantes.put(destino, constante);
+            return true;
+        }
+
+        constantes.remove(destino);
+        return false;
+    }
+
+    private static String construirLinea(StringBuilder linea) {
+        String limpia = linea.toString().trim();
+        linea.setLength(0);
+        return limpia;
+    }
+
+    private static String evaluarConstante(List<String> exprTokens) {
+        if (exprTokens.isEmpty()) {
+            return null;
+        }
+
+        List<String> postfijo = convertirInfijoAPostfijoSimple(exprTokens);
+        if (postfijo.isEmpty()) {
+            return null;
+        }
+
+        Deque<Double> pila = new ArrayDeque<>();
+        for (String token : postfijo) {
+            if (PATRON_ENTERO.matcher(token).matches() || PATRON_FLOTANTE.matcher(token).matches()) {
+                pila.push(Double.parseDouble(token));
+                continue;
+            }
+
+            if (esOperadorSimple(token)) {
+                if (pila.size() < 2) {
+                    return null;
+                }
+                double der = pila.pop();
+                double izq = pila.pop();
+                Double resultado = evaluarOperacionSimple(izq, der, token);
+                if (resultado == null) {
+                    return null;
+                }
+                pila.push(resultado);
+                continue;
+            }
+
+            return null;
+        }
+
+        if (pila.size() != 1) {
+            return null;
+        }
+
+        return formatearNumero(pila.pop());
+    }
+
+    private static List<String> convertirInfijoAPostfijoSimple(List<String> infijo) {
+        List<String> salida = new ArrayList<>();
+        Deque<String> operadores = new ArrayDeque<>();
+
+        for (String token : infijo) {
+            if (PATRON_ENTERO.matcher(token).matches() || PATRON_FLOTANTE.matcher(token).matches()) {
+                salida.add(token);
+                continue;
+            }
+
+            if ("(".equals(token)) {
+                operadores.push(token);
+                continue;
+            }
+
+            if (")".equals(token)) {
+                while (!operadores.isEmpty() && !"(".equals(operadores.peek())) {
+                    salida.add(operadores.pop());
+                }
+                if (!operadores.isEmpty() && "(".equals(operadores.peek())) {
+                    operadores.pop();
+                }
+                continue;
+            }
+
+            if (esOperadorSimple(token)) {
+                while (!operadores.isEmpty()
+                        && esOperadorSimple(operadores.peek())
+                        && precedenciaSimple(operadores.peek()) >= precedenciaSimple(token)) {
+                    salida.add(operadores.pop());
+                }
+                operadores.push(token);
+            } else {
+                return new ArrayList<>();
+            }
+        }
+
+        while (!operadores.isEmpty()) {
+            String op = operadores.pop();
+            if (!"(".equals(op) && !")".equals(op)) {
+                salida.add(op);
+            }
+        }
+
+        return salida;
+    }
+
+    private static boolean esOperadorSimple(String token) {
+        return "+".equals(token) || "-".equals(token) || "*".equals(token)
+                || "/".equals(token) || "%".equals(token);
+    }
+
+    private static int precedenciaSimple(String operador) {
+        if ("*".equals(operador) || "/".equals(operador) || "%".equals(operador)) {
+            return 2;
+        }
+        if ("+".equals(operador) || "-".equals(operador)) {
+            return 1;
+        }
+        return 0;
+    }
+
+    private static Double evaluarOperacionSimple(double izq, double der, String operador) {
+        switch (operador) {
+            case "+":
+                return izq + der;
+            case "-":
+                return izq - der;
+            case "*":
+                return izq * der;
+            case "/":
+                return der == 0.0d ? null : izq / der;
+            case "%":
+                return der == 0.0d ? null : izq % der;
+            default:
+                return null;
+        }
+    }
+
+    private static void escribirToken(StringBuilder linea, LexicoItem token) {
+        escribirTokenLexema(linea, token.lexema, token.token);
+    }
+
+    private static void escribirTokenLexema(StringBuilder linea, String lexema, String tipoToken) {
+        if (lexema == null || lexema.isEmpty()) {
+            return;
+        }
+
+        boolean necesitaEspacio = false;
+        if (linea.length() > 0) {
+            char ultimo = linea.charAt(linea.length() - 1);
+            boolean ultimoEsPalabra = Character.isLetterOrDigit(ultimo) || ultimo == '_' || ultimo == '"';
+            boolean actualEsPalabra = esTokenPalabra(tipoToken) || Character.isLetterOrDigit(lexema.charAt(0))
+                    || lexema.charAt(0) == '"' || lexema.charAt(0) == '_';
+            necesitaEspacio = ultimoEsPalabra && actualEsPalabra;
+        }
+
+        if (necesitaEspacio) {
+            linea.append(' ');
+        }
+        linea.append(lexema);
+    }
+
+    private static boolean esTokenPalabra(String tipoToken) {
+        return "identificador".equals(tipoToken)
+                || "palabra reservada".equals(tipoToken)
+                || "numero".equals(tipoToken)
+                || "booleano".equals(tipoToken)
+                || "cadena".equals(tipoToken);
+    }
+
+    private static void agregarLineaOptimizada(StringBuilder salida, StringBuilder linea) {
+        String limpia = linea.toString().trim();
+        linea.setLength(0);
+        if (limpia.isEmpty()) {
+            return;
+        }
+        if (salida.length() > 0) {
+            salida.append(System.lineSeparator());
+        }
+        salida.append(limpia);
     }
 
     private static List<ExpresionIntermedia> optimizarCodigoIntermedio(List<ExpresionIntermedia> expresiones) {
@@ -845,6 +1336,22 @@ public class Verti_AutomatasI {
 
         optimizadoArea.setText(salida.toString());
         optimizadoArea.setCaretPosition(0);
+    }
+
+    private static class StatementInfo {
+        private final String texto;
+        private final String destino;
+        private final boolean esAsignacion;
+        private final boolean constante;
+        private final Set<String> usados;
+
+        private StatementInfo(String texto, String destino, boolean esAsignacion, boolean constante, Set<String> usados) {
+            this.texto = texto;
+            this.destino = destino;
+            this.esAsignacion = esAsignacion;
+            this.constante = constante;
+            this.usados = usados != null ? usados : new HashSet<>();
+        }
     }
 
     private static class ExpresionIntermedia {
