@@ -9,8 +9,11 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Image;
+import java.awt.Taskbar;
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayDeque;
@@ -25,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import javax.imageio.ImageIO;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -104,6 +108,7 @@ public class Verti_AutomatasI {
         // Ventana principal del analizador.
         JFrame frame = new JFrame("Verti - Analizador");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        aplicarIconoVentana(frame);
         // Referencia al archivo actualmente abierto (null si no hay archivo asociado)
         AtomicReference<File> currentFile = new AtomicReference<>(null);
         AtomicReference<Long> lastAnalisisOriginalMs = new AtomicReference<>(null);
@@ -408,6 +413,41 @@ public class Verti_AutomatasI {
         // Abrir en pantalla completa (ventana maximizada)
         frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
         frame.setVisible(true);
+    }
+
+    private static void aplicarIconoVentana(JFrame frame) {
+        Image base = cargarIconoBase();
+        if (base == null) {
+            return;
+        }
+        List<Image> iconos = new ArrayList<>();
+        iconos.add(base.getScaledInstance(16, 16, Image.SCALE_SMOOTH));
+        iconos.add(base.getScaledInstance(32, 32, Image.SCALE_SMOOTH));
+        iconos.add(base.getScaledInstance(48, 48, Image.SCALE_SMOOTH));
+        iconos.add(base.getScaledInstance(64, 64, Image.SCALE_SMOOTH));
+        frame.setIconImages(iconos);
+        if (Taskbar.isTaskbarSupported()) {
+            Taskbar taskbar = Taskbar.getTaskbar();
+            if (taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) {
+                taskbar.setIconImage(base);
+            }
+        }
+    }
+
+    private static Image cargarIconoBase() {
+        try {
+            URL iconUrl = Verti_AutomatasI.class.getResource("/verti_automatasi/logo_verti.png");
+            if (iconUrl != null) {
+                return ImageIO.read(iconUrl);
+            }
+            File iconFile = new File("src/verti_automatasi/logo_verti.png");
+            if (iconFile.isFile()) {
+                return ImageIO.read(iconFile);
+            }
+        } catch (IOException ex) {
+            return null;
+        }
+        return null;
     }
 
     private static JScrollPane crearEditorConNumerosDeLinea(JTextArea entradaArea) {
